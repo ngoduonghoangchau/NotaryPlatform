@@ -1,0 +1,6 @@
+@NotaryPlatform.API_HostAddress = http://localhost:5193
+
+GET {{NotaryPlatform.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

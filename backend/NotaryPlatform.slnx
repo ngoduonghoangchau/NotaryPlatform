@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="NotaryPlatform.API/NotaryPlatform.API.csproj" />
+  <Project Path="NotaryPlatform.Domain/NotaryPlatform.Domain.csproj" />
+  <Project Path="NotaryPlatform.Infrastructure/NotaryPlatform.Infrastructure.csproj" />
+</Solution>
