@@ -1,0 +1,43 @@
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using NotaryPlatform.Domain.Common.Base;
+using NotaryPlatform.Domain.Common.Exceptions;
+
+namespace NotaryPlatform.Domain.Features.Compliance.ValueObjects;
+
+public sealed class PolicyCode : ValueObject
+{
+    private static readonly Regex Pattern = new("^[A-Z0-9][A-Z0-9_-]{2,49}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    public string Value { get; }
+
+    private PolicyCode(string value)
+    {
+        Value = value;
+    }
+
+    public static PolicyCode Create(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new BusinessRuleValidationException("Policy code is required.");
+        }
+
+        var normalized = value.Trim().ToUpperInvariant();
+
+        if (!Pattern.IsMatch(normalized))
+        {
+            throw new BusinessRuleValidationException(
+                "Policy code must be 3-50 characters and contain only upper-case letters, digits, underscore or hyphen.");
+        }
+
+        return new PolicyCode(normalized);
+    }
+
+    protected override IEnumerable<object?> GetAtomicValues()
+    {
+        yield return Value;
+    }
+
+    public override string ToString() => Value;
+}
