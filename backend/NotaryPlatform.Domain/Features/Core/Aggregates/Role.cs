@@ -5,7 +5,7 @@ namespace NotaryPlatform.Domain.Features.Core.Aggregates;
 
 public sealed class Role : AggregateRoot
 {
-    private readonly List<Permission> _permissions = new();
+    private readonly List<Permission> _permissions = [];
 
     public Guid TenantId { get; private set; }
     public string Code { get; private set; } = string.Empty;

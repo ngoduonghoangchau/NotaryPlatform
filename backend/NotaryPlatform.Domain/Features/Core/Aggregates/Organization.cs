@@ -7,11 +7,11 @@ namespace NotaryPlatform.Domain.Features.Core.Aggregates;
 
 public sealed class Organization : AggregateRoot
 {
-    private readonly List<Organization> _children = new();
-    private readonly List<Branch> _branches = new();
-    private readonly List<Region> _regions = new();
-    private readonly List<Team> _teams = new();
-    private readonly List<User> _users = new();
+    private readonly List<Organization> _children = [];
+    private readonly List<Branch> _branches = [];
+    private readonly List<Region> _regions = [];
+    private readonly List<Team> _teams = [];
+    private readonly List<User> _users = [];
 
     public Guid TenantId { get; private set; }
     public Guid? ParentOrganizationId { get; private set; }

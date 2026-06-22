@@ -8,12 +8,12 @@ namespace NotaryPlatform.Domain.Features.Core.Aggregates;
 
 public sealed class Tenant : AggregateRoot
 {
-    private readonly List<Organization> _organizations = new();
-    private readonly List<Branch> _branches = new();
-    private readonly List<Region> _regions = new();
-    private readonly List<Team> _teams = new();
-    private readonly List<User> _users = new();
-    private readonly List<Role> _roles = new();
+    private readonly List<Organization> _organizations = [];
+    private readonly List<Branch> _branches = [];
+    private readonly List<Region> _regions = [];
+    private readonly List<Team> _teams = [];
+    private readonly List<User> _users = [];
+    private readonly List<Role> _roles = [];
 
     public TenantCode Code { get; private set; } = null!;
     public string Name { get; private set; } = string.Empty;

@@ -6,7 +6,7 @@ namespace NotaryPlatform.Domain.Features.Core.Aggregates;
 
 public sealed class Region : AggregateRoot
 {
-    private readonly List<Team> _teams = new();
+    private readonly List<Team> _teams = [];
 
     public Guid TenantId { get; private set; }
     public Guid OrganizationId { get; private set; }

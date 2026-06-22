@@ -8,7 +8,7 @@ namespace NotaryPlatform.Domain.Features.Core.Aggregates;
 
 public sealed class User : AggregateRoot
 {
-    private readonly List<Role> _roles = new();
+    private readonly List<Role> _roles = [];
 
     public Guid TenantId { get; private set; }
     public Guid? OrganizationId { get; private set; }

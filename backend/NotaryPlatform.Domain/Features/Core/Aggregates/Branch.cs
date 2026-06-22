@@ -6,8 +6,8 @@ namespace NotaryPlatform.Domain.Features.Core.Aggregates;
 
 public sealed class Branch : AggregateRoot
 {
-    private readonly List<Team> _teams = new();
-    private readonly List<User> _users = new();
+    private readonly List<Team> _teams = [];
+    private readonly List<User> _users = [];
 
     public Guid TenantId { get; private set; }
     public Guid OrganizationId { get; private set; }

@@ -7,11 +7,11 @@ namespace NotaryPlatform.Domain.Features.Identity.Aggregates;
 
 public sealed class Notary : AggregateRoot
 {
-    private readonly List<NotaryCommission> _commissions = new();
-    private readonly List<NotaryLicense> _licenses = new();
-    private readonly List<NotaryBond> _bonds = new();
-    private readonly List<NotaryInsurance> _insurances = new();
-    private readonly List<NotaryCapability> _capabilities = new();
+    private readonly List<NotaryCommission> _commissions = [];
+    private readonly List<NotaryLicense> _licenses = [];
+    private readonly List<NotaryBond> _bonds = [];
+    private readonly List<NotaryInsurance> _insurances = [];
+    private readonly List<NotaryCapability> _capabilities = [];
 
     public Guid TenantId { get; private set; }
     public Guid UserId { get; private set; }
