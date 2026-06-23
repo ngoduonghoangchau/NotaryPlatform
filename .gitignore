@@ -179,3 +179,9 @@ Tooling/
 #!frontend/vite.config.ts
 #!backend/*.csproj
 #!*.sln
+
+**/CLAUDE.md
+docs/
+frontend/docs/
+backend/docs/
+**/[fF]eatures/**/context.md
