@@ -44,7 +44,7 @@ public sealed class LoggingBehavior<TRequest, TResponse>
         var sw = Stopwatch.StartNew();
         try
         {
-            var response = await next();
+            var response = await next(cancellationToken);
             sw.Stop();
 
             if (sw.ElapsedMilliseconds > SlowRequestThresholdMs)

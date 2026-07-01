@@ -35,7 +35,7 @@ public sealed class AuthorizationBehavior<TRequest, TResponse>
         CancellationToken cancellationToken)
     {
         if (request is not IAuthorizedRequest authorizedRequest)
-            return await next();
+            return await next(cancellationToken);
 
         if (!_currentUser.IsAuthenticated)
         {
@@ -55,7 +55,7 @@ public sealed class AuthorizationBehavior<TRequest, TResponse>
                 requiredPermission: authorizedRequest.RequiredPermission);
         }
 
-        return await next();
+        return await next(cancellationToken);
     }
 }
 

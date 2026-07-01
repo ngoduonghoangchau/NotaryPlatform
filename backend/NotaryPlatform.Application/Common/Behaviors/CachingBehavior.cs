@@ -43,7 +43,7 @@ public sealed class CachingBehavior<TRequest, TResponse>
         }
 
         _logger.LogDebug("Cache miss for key={CacheKey}", request.CacheKey);
-        var response = await next();
+        var response = await next(cancellationToken);
 
         await _cache.SetAsync(request.CacheKey, response, request.CacheExpiry, cancellationToken);
         return response;

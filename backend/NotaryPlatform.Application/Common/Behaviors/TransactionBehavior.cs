@@ -34,7 +34,7 @@ public sealed class TransactionBehavior<TRequest, TResponse>
     {
         // Only intercept commands — skip queries and plain MediatR requests
         if (request is not ICommand and not ICommand<TResponse>)
-            return await next();
+            return await next(cancellationToken);
 
         var requestName = typeof(TRequest).Name;
         _logger.LogDebug("Beginning transaction for {RequestName}", requestName);
@@ -42,7 +42,7 @@ public sealed class TransactionBehavior<TRequest, TResponse>
         await _unitOfWork.BeginTransactionAsync(cancellationToken);
         try
         {
-            var response = await next();
+            var response = await next(cancellationToken);
             await _unitOfWork.CommitTransactionAsync(cancellationToken);
             _logger.LogDebug("Transaction committed for {RequestName}", requestName);
             return response;
