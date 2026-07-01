@@ -16,7 +16,14 @@ public record PagedQuery
     /// <summary>Free-text search term applied to searchable fields per handler.</summary>
     public string? Search { get; init; }
 
-    public int Skip => Math.Max(0, (Page - 1) * Limit);
-    public int Take => Math.Clamp(Limit, 1, AppDefaults.Pagination.MaxLimit);
+    /// <summary>Row offset for SQL. Computed from Page and ClampedLimit.</summary>
+    public int Skip => Math.Max(0, (Page - 1) * ClampedLimit);
+
+    /// <summary>
+    /// Limit clamped to [1, MaxLimit]. Always use this in queries, never raw Limit —
+    /// a client could send limit=10000 to trigger a full table scan.
+    /// </summary>
+    public int ClampedLimit => Math.Clamp(Limit, 1, AppDefaults.Pagination.MaxLimit);
+
     public bool IsDescending => string.Equals(SortDirection, "desc", StringComparison.OrdinalIgnoreCase);
 }
