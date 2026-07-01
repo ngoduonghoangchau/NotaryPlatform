@@ -181,7 +181,7 @@ Tooling/
 #!*.sln
 
 **/CLAUDE.md
-docs/
+**/docs/
 frontend/docs/
 backend/docs/
 **/[fF]eatures/**/context.md
