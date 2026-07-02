@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using NotaryPlatform.Application.Common.Interfaces;
+using NotaryPlatform.Application.Abstractions.Authorization;
 using NotaryPlatform.Infrastructure.Persistence.DbContexts;
 
 namespace NotaryPlatform.Infrastructure.Services.Authentication;

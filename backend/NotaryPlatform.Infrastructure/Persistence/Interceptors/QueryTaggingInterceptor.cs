@@ -1,7 +1,8 @@
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
-using NotaryPlatform.Application.Common.Interfaces;
+using NotaryPlatform.Application.Abstractions.Authentication;
+using NotaryPlatform.Application.Shared.Interfaces;
 
 namespace NotaryPlatform.Infrastructure.Persistence.Interceptors;
 
@@ -123,7 +124,7 @@ public sealed class QueryTaggingInterceptor : DbCommandInterceptor
         var currentUser = scope.ServiceProvider.GetService<ICurrentUser>();
 
         var tenantId = currentUser?.TenantId?.ToString() ?? "anon";
-        var userId   = currentUser?.UserId?.ToString()   ?? "anon";
+        var userId = currentUser?.UserId?.ToString() ?? "anon";
 
         // PostgreSQL is fine with /* comments */ at the start of any statement.
         // The tag appears verbatim in pg_stat_activity.query and pg_log.

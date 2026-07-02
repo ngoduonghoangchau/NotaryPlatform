@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using NotaryPlatform.Application.Common.Interfaces;
+using NotaryPlatform.Application.Abstractions.Messaging;
 
 namespace NotaryPlatform.Infrastructure.Services.Messaging;
 

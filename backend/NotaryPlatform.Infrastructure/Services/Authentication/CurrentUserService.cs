@@ -1,7 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
-using NotaryPlatform.Application.Common.Exceptions;
-using NotaryPlatform.Application.Common.Interfaces;
+using NotaryPlatform.Application.Abstractions.Authentication;
+using NotaryPlatform.Application.Shared.Exceptions;
+using NotaryPlatform.Application.Shared.Interfaces;
 
 namespace NotaryPlatform.Infrastructure.Services.Authentication;
 

@@ -1,13 +1,21 @@
 using System.Text;
 using FirebaseAdmin;
 using FirebaseAdmin.Messaging;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
-using NotaryPlatform.Application.Common.Interfaces;
+using NotaryPlatform.Application.Abstractions.Authentication;
+using NotaryPlatform.Application.Abstractions.Authorization;
+using NotaryPlatform.Application.Abstractions.BackgroundJobs;
+using NotaryPlatform.Application.Abstractions.Caching;
+using NotaryPlatform.Application.Abstractions.Messaging;
+using NotaryPlatform.Application.Abstractions.Persistence;
+// using NotaryPlatform.Application.Features.Core.Auth;
 using NotaryPlatform.Infrastructure.Authorization.Policies;
 using NotaryPlatform.Infrastructure.Caching;
 using NotaryPlatform.Infrastructure.HealthChecks;
@@ -18,10 +26,13 @@ using NotaryPlatform.Infrastructure.Persistence.Interceptors;
 using NotaryPlatform.Infrastructure.Services.Authentication;
 using NotaryPlatform.Infrastructure.Services.External.Firestore;
 using NotaryPlatform.Infrastructure.Services.Files;
+using NotaryPlatform.Infrastructure.Services;
 using NotaryPlatform.Infrastructure.Services.Jobs;
 using NotaryPlatform.Infrastructure.Services.Messaging;
 using Serilog.Core;
 using StackExchange.Redis;
+using NotaryPlatform.Application.Abstractions.Storage;
+using NotaryPlatform.Application.Abstractions.System;
 
 namespace NotaryPlatform.Infrastructure;
 
@@ -31,6 +42,8 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddScoped<IDateTime, SystemDateTimeService>();
+
         AddDatabase(services, configuration);
         AddAuthentication(services, configuration);
         services.AddNotaryPlatformAuthorization();
@@ -39,7 +52,7 @@ public static class DependencyInjection
         AddObservability(services, configuration);
         AddFileStorage(services, configuration);
         AddMessaging(services, configuration);
-        AddJobs(services);
+        AddJobs(services, configuration);
         AddExternalServices(services, configuration);
 
         return services;
@@ -85,6 +98,7 @@ public static class DependencyInjection
         services.AddDbContext<NotaryPlatformDbContext>((sp, options) =>
             options
                 .UseNpgsql(connectionString)
+                .UseSnakeCaseNamingConvention()
                 .AddInterceptors(
                     sp.GetRequiredService<OutboxSaveChangesInterceptor>(),
                     sp.GetRequiredService<AuditingSaveChangesInterceptor>(),
@@ -94,6 +108,9 @@ public static class DependencyInjection
                     sp.GetRequiredService<DbConnectionResilienceInterceptor>(),
                     sp.GetRequiredService<TransactionLifecycleInterceptor>()
                 ));
+
+        services.AddScoped<IUnitOfWork>(sp =>
+            sp.GetRequiredService<NotaryPlatformDbContext>());
     }
 
     // ── Authentication ────────────────────────────────────────────────────────────
@@ -103,9 +120,9 @@ public static class DependencyInjection
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
 
         var jwtSection = configuration.GetSection(JwtSettings.SectionName);
-        var secretKey  = jwtSection["SecretKey"]  ?? throw new InvalidOperationException("Jwt:SecretKey is required.");
-        var issuer     = jwtSection["Issuer"]      ?? throw new InvalidOperationException("Jwt:Issuer is required.");
-        var audience   = jwtSection["Audience"]    ?? throw new InvalidOperationException("Jwt:Audience is required.");
+        var secretKey = jwtSection["SecretKey"] ?? throw new InvalidOperationException("Jwt:SecretKey is required.");
+        var issuer = jwtSection["Issuer"] ?? throw new InvalidOperationException("Jwt:Issuer is required.");
+        var audience = jwtSection["Audience"] ?? throw new InvalidOperationException("Jwt:Audience is required.");
 
         // LEARNING — JWT Bearer middleware:
         //   Validates the Authorization: Bearer <token> header on every request.
@@ -116,15 +133,15 @@ public static class DependencyInjection
             {
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    ValidateIssuer           = true,
-                    ValidateAudience         = true,
-                    ValidateLifetime         = true,
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
-                    ValidIssuer              = issuer,
-                    ValidAudience            = audience,
-                    IssuerSigningKey         = new SymmetricSecurityKey(
+                    ValidIssuer = issuer,
+                    ValidAudience = audience,
+                    IssuerSigningKey = new SymmetricSecurityKey(
                         Encoding.UTF8.GetBytes(secretKey)),
-                    ClockSkew                = TimeSpan.Zero
+                    ClockSkew = TimeSpan.Zero
                 };
             });
 
@@ -138,6 +155,12 @@ public static class DependencyInjection
 
         // IPermissionService — Scoped: wraps scoped NotaryPlatformDbContext.
         services.AddScoped<IPermissionService, PermissionService>();
+
+        // IPasswordHasher — Scoped: BCrypt, stateless but scoped for consistency.
+        services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
+
+        // IAuthRepository — Scoped: wraps scoped NotaryPlatformDbContext.
+        // services.AddScoped<IAuthRepository, AuthRepository>();
     }
 
     // ── File Storage ──────────────────────────────────────────────────────────────
@@ -197,17 +220,22 @@ public static class DependencyInjection
 
     // ── Jobs ──────────────────────────────────────────────────────────────────────
 
-    private static void AddJobs(IServiceCollection services)
+    private static void AddJobs(IServiceCollection services, IConfiguration configuration)
     {
-        // HangfireService — thin facade over IBackgroundJobClient + IRecurringJobManager.
-        // Hangfire registers its own IBackgroundJobClient and IRecurringJobManager;
-        // ensure AddHangfire() is called in Program.cs before AddInfrastructure().
+        var connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException(
+                "Connection string 'DefaultConnection' was not found.");
+
+        services.AddHangfire(config => config
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connectionString)));
+
+        services.AddHangfireServer();
+
         services.AddScoped<HangfireService>();
-
-        // IJobScheduler — business-intent API for Application use cases.
         services.AddScoped<IJobScheduler, JobScheduler>();
-
-        // RecurringJobRegistrar — called once at startup from Program.cs to register cron jobs.
         services.AddScoped<RecurringJobRegistrar>();
     }
 

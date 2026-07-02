@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using Google.Apis.Auth.OAuth2;
 using Microsoft.Extensions.Options;
-using NotaryPlatform.Application.Common.Interfaces;
+using NotaryPlatform.Application.Abstractions.Storage;
 
 namespace NotaryPlatform.Infrastructure.Services.Files;
 
