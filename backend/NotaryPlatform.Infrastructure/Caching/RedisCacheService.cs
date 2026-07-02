@@ -1,7 +1,8 @@
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
-using NotaryPlatform.Application.Common.Interfaces;
+using NotaryPlatform.Application.Abstractions.Caching;
+using NotaryPlatform.Application.Shared.Interfaces;
 using StackExchange.Redis;
 
 namespace NotaryPlatform.Infrastructure.Caching;

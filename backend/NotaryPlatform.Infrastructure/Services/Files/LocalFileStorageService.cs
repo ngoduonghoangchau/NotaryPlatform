@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Options;
-using NotaryPlatform.Application.Common.Interfaces;
+using NotaryPlatform.Application.Abstractions.Storage;
 
 namespace NotaryPlatform.Infrastructure.Services.Files;
 
@@ -29,8 +29,8 @@ public sealed class LocalFileStorageService : IFileStorageService
     public LocalFileStorageService(IWebHostEnvironment env, IOptions<LocalStorageSettings> options)
     {
         var settings = options.Value;
-        _rootPath    = Path.Combine(env.WebRootPath, settings.UploadPath);
-        _baseUrl     = settings.BaseUrl.TrimEnd('/') + "/" + settings.UploadPath;
+        _rootPath = Path.Combine(env.WebRootPath, settings.UploadPath);
+        _baseUrl = settings.BaseUrl.TrimEnd('/') + "/" + settings.UploadPath;
 
         Directory.CreateDirectory(_rootPath);
     }
@@ -42,9 +42,9 @@ public sealed class LocalFileStorageService : IFileStorageService
         Guid tenantId,
         CancellationToken cancellationToken = default)
     {
-        var storagePath  = FileNameGenerator.Generate(fileName, folder, tenantId);
+        var storagePath = FileNameGenerator.Generate(fileName, folder, tenantId);
         var absolutePath = ToAbsolutePath(storagePath);
-        var contentType  = FileNameGenerator.GetContentType(fileName);
+        var contentType = FileNameGenerator.GetContentType(fileName);
 
         Directory.CreateDirectory(Path.GetDirectoryName(absolutePath)!);
 
@@ -54,9 +54,9 @@ public sealed class LocalFileStorageService : IFileStorageService
         return new FileUploadResult
         {
             StoragePath = storagePath,
-            FileName    = Path.GetFileName(absolutePath),
+            FileName = Path.GetFileName(absolutePath),
             ContentType = contentType,
-            SizeBytes   = dest.Length,
+            SizeBytes = dest.Length,
         };
     }
 

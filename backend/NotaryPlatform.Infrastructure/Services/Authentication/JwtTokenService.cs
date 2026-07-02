@@ -4,8 +4,9 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using NotaryPlatform.Application.Common.Interfaces;
-using NotaryPlatform.Application.Common.Models.Auth;
+using NotaryPlatform.Application.Abstractions.Authentication;
+using NotaryPlatform.Application.Shared.Interfaces;
+using NotaryPlatform.Application.Shared.Models.Auth;
 
 namespace NotaryPlatform.Infrastructure.Services.Authentication;
 
