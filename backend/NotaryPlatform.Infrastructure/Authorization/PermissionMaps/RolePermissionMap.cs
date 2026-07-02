@@ -104,6 +104,13 @@ public static class RolePermissionMap
         // Admin — tenant-scoped subset (no TenantsManage or PermissionsManage)
         Admin.UsersManage, Admin.RolesManage,
         Admin.BranchesManage, Admin.OrgManage, Admin.AuditRead,
+
+        // Core — own-tenant profile and tenant-scoped user/role administration.
+        // TenantsCreate/TenantsDelete and Permissions.Manage are platform-level
+        // (SystemAdmin-only by convention) and intentionally excluded here.
+        Core.TenantsRead, Core.TenantsUpdate,
+        Core.UsersRead, Core.UsersCreate, Core.UsersUpdate, Core.UsersLock,
+        Core.RolesRead, Core.RolesManage, Core.PermissionsRead,
     ];
 
     private static IReadOnlyList<string> BuildComplianceOfficerPermissions() =>
