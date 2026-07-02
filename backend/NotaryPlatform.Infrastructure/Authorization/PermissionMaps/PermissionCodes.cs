@@ -197,4 +197,35 @@ public static class PermissionCodes
         public const string OrgManage = "admin.org.manage";
         public const string AuditRead = "admin.audit.read";
     }
+
+    /// <summary>
+    /// Core module — fine-grained CRUD over the <c>core</c> schema aggregates
+    /// (tenants, users, roles, permissions). Tenant provisioning
+    /// (<see cref="TenantsCreate"/>/<see cref="TenantsDelete"/>) and permission
+    /// catalog authoring (<see cref="PermissionsManage"/>) are platform-level
+    /// operations granted to SystemAdmin by convention, not through
+    /// <c>RolePermissionMap</c>.
+    /// </summary>
+    public static class Core
+    {
+        // Tenants
+        public const string TenantsRead = "core.tenants.read";
+        public const string TenantsCreate = "core.tenants.create";
+        public const string TenantsUpdate = "core.tenants.update";
+        public const string TenantsDelete = "core.tenants.delete";
+
+        // Users
+        public const string UsersRead = "core.users.read";
+        public const string UsersCreate = "core.users.create";
+        public const string UsersUpdate = "core.users.update";
+        public const string UsersLock = "core.users.lock";
+
+        // Roles
+        public const string RolesRead = "core.roles.read";
+        public const string RolesManage = "core.roles.manage";
+
+        // Permissions
+        public const string PermissionsRead = "core.permissions.read";
+        public const string PermissionsManage = "core.permissions.manage";
+    }
 }
