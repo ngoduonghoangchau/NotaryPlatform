@@ -34,4 +34,8 @@ public static class CacheKeys
     // ── Security ──────────────────────────────────────────────────────────
     public static string ActiveSeal(Guid tenantId, Guid notaryId) => $"Security:ActiveSeal:{tenantId}:{notaryId}";
     public static string ActiveCertificate(Guid tenantId, Guid notaryId) => $"Security:ActiveCert:{tenantId}:{notaryId}";
+
+    // ── Auth ──────────────────────────────────────────────────────────────
+    /// <summary>Failed-login counter + lockout window for BR-AUTH-02 (email is lower-cased).</summary>
+    public static string LoginAttempts(Guid tenantId, string email) => $"Auth:LoginAttempts:{tenantId}:{email}";
 }

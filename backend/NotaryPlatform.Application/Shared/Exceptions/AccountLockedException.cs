@@ -15,6 +15,14 @@ public sealed class AccountLockedException : Exception
         RemainingLockout = remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
     }
 
+    /// <summary>
+    /// For an indefinite / administrative lock (e.g. <c>UserStatus.Locked</c>) that has no automatic
+    /// lift time. <see cref="RemainingLockout"/> is reported as zero (unknown).
+    /// </summary>
+    public AccountLockedException(string message)
+        : base(message)
+        => RemainingLockout = TimeSpan.Zero;
+
     private static string BuildMessage(DateTime lockedUntilUtc)
     {
         var remaining = lockedUntilUtc - DateTime.UtcNow;
