@@ -17,4 +17,9 @@
     <ProjectReference Include="..\NotaryPlatform.Domain\NotaryPlatform.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Command/query handlers are internal sealed (BE-PROJECT-RULES §4.4); expose them to unit tests. -->
+    <InternalsVisibleTo Include="NotaryPlatform.Application.Tests" />
+  </ItemGroup>
+
 </Project>
