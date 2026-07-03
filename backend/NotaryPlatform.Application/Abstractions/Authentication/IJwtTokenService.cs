@@ -10,8 +10,12 @@ namespace NotaryPlatform.Application.Abstractions.Authentication;
 /// </summary>
 public interface IJwtTokenService
 {
-    /// <summary>Creates a signed JWT embedding the supplied claims.</summary>
-    string CreateAccessToken(JwtTokenClaims claims);
+    /// <summary>
+    /// Creates a signed JWT embedding the supplied claims and returns it together
+    /// with its authoritative expiry (the token's own <c>exp</c>), so callers never
+    /// have to re-derive the lifetime from a separate constant.
+    /// </summary>
+    AccessTokenResult CreateAccessToken(JwtTokenClaims claims);
 
     /// <summary>
     /// Returns a cryptographically random refresh token (raw / plain form).
