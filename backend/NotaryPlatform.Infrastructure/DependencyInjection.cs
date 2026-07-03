@@ -23,6 +23,7 @@ using NotaryPlatform.Infrastructure.Observability.OpenTelemetry;
 using NotaryPlatform.Infrastructure.Observability.Serilog;
 using NotaryPlatform.Infrastructure.Persistence.DbContexts;
 using NotaryPlatform.Infrastructure.Persistence.Interceptors;
+using NotaryPlatform.Infrastructure.Persistence.Repositories.Core;
 using NotaryPlatform.Infrastructure.Services.Authentication;
 using NotaryPlatform.Infrastructure.Services.External.Firestore;
 using NotaryPlatform.Infrastructure.Services.Files;
@@ -159,8 +160,11 @@ public static class DependencyInjection
         // IPasswordHasher — Scoped: BCrypt, stateless but scoped for consistency.
         services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 
-        // IAuthRepository — Scoped: wraps scoped NotaryPlatformDbContext.
-        // services.AddScoped<IAuthRepository, AuthRepository>();
+        // IAuthRepository — Scoped: wraps scoped NotaryPlatformDbContext (reads generated entities directly).
+        services.AddScoped<IAuthRepository, AuthRepository>();
+
+        // ILoginAttemptTracker — Scoped: Redis-backed failed-login lockout counter (BR-AUTH-02).
+        services.AddScoped<ILoginAttemptTracker, LoginAttemptTracker>();
     }
 
     // ── File Storage ──────────────────────────────────────────────────────────────
