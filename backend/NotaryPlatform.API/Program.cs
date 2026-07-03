@@ -5,6 +5,7 @@ using Microsoft.OpenApi.Models;
 using NotaryPlatform.API.Middleware;
 using NotaryPlatform.Application;
 using NotaryPlatform.Infrastructure;
+using NotaryPlatform.Infrastructure.Persistence.Seed.Orchestration;
 
 var envPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".env"));
 if (File.Exists(envPath))
@@ -67,6 +68,18 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+// ── Optional database seeding (opt-in; dev / staging only) ───────────────────
+// Enable by setting Seeding__RunOnStartup=true in .env. Idempotent — each seeder
+// skips rows that already exist. The profile comes from Seeding__Profile
+// (default Development) and picks which seeders + volumes run.
+// NEVER enable in production: the Development/Staging profiles seed fake
+// tenants, users, and business data.
+if (app.Configuration.GetValue<bool>("Seeding:RunOnStartup"))
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<ISeedOrchestrator>().RunAsync();
+}
 
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
