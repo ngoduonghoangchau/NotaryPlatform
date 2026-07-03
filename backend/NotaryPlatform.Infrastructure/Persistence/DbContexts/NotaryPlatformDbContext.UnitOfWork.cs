@@ -14,6 +14,14 @@ public partial class NotaryPlatformDbContext : IUnitOfWork
 
     public async Task CommitTransactionAsync(CancellationToken cancellationToken = default)
     {
+        // Flush tracked changes BEFORE committing the DB transaction. Without this,
+        // the change tracker never emits its INSERT/UPDATE SQL and the transaction
+        // commits an empty unit of work — a command handler that (correctly, per the
+        // project rules) does not call SaveChangesAsync itself would silently persist
+        // nothing. SaveChangesAsync here also triggers the EF interceptors (Outbox,
+        // Auditing, SoftDelete), which only run during a save.
+        await SaveChangesAsync(cancellationToken);
+
         await _currentTransaction!.CommitAsync(cancellationToken);
         await _currentTransaction.DisposeAsync();
         _currentTransaction = null;
