@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using NotaryPlatform.Application.Abstractions.Authentication;
 using NotaryPlatform.Application.Abstractions.Authorization;
 using NotaryPlatform.Application.Abstractions.BackgroundJobs;
@@ -21,6 +22,7 @@ using NotaryPlatform.Infrastructure.Caching;
 using NotaryPlatform.Infrastructure.HealthChecks;
 using NotaryPlatform.Infrastructure.Observability.OpenTelemetry;
 using NotaryPlatform.Infrastructure.Observability.Serilog;
+using NotaryPlatform.Infrastructure.Persistence;
 using NotaryPlatform.Infrastructure.Persistence.DbContexts;
 using NotaryPlatform.Infrastructure.Persistence.Interceptors;
 using NotaryPlatform.Infrastructure.Persistence.Repositories.Core;
@@ -67,6 +69,21 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "Connection string 'DefaultConnection' was not found.");
 
+        // ── Npgsql data source with CLR ↔ PostgreSQL enum mappings ────────────
+        //
+        // LEARNING — why map enums here and not only via modelBuilder.HasPostgresEnum(...)?
+        //   HasPostgresEnum(...) teaches EF about the enum for *migrations* only. For
+        //   runtime query translation and parameter binding, the CLR enum must be
+        //   registered on the Npgsql data source — otherwise EF sends the value as a
+        //   plain integer and PostgreSQL rejects it:
+        //     42883: operator does not exist: core.user_status = integer
+        //   NpgsqlEnumMappings maps every Domain enum (by reflection) so any feature that
+        //   queries an enum column works without adding a line here per enum.
+        var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+        NpgsqlEnumMappings.MapDomainEnums(dataSourceBuilder);
+        var dataSource = dataSourceBuilder.Build();
+        services.AddSingleton(dataSource);
+
         // ── EF Core interceptors (all Singleton) ──────────────────────────────
         //
         // LEARNING — why Singleton interceptors?
@@ -98,7 +115,7 @@ public static class DependencyInjection
         // so we can resolve the singleton interceptors registered above.
         services.AddDbContext<NotaryPlatformDbContext>((sp, options) =>
             options
-                .UseNpgsql(connectionString)
+                .UseNpgsql(dataSource)
                 .UseSnakeCaseNamingConvention()
                 .AddInterceptors(
                     sp.GetRequiredService<OutboxSaveChangesInterceptor>(),
