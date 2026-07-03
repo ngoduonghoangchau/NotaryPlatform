@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="NotaryPlatform.API/NotaryPlatform.API.csproj" />
   <Project Path="NotaryPlatform.Application/NotaryPlatform.Application.csproj" Id="cd62bdc4-685d-47be-af96-91e570582687" />
+  <Project Path="NotaryPlatform.Application.Tests/NotaryPlatform.Application.Tests.csproj" />
   <Project Path="NotaryPlatform.Domain/NotaryPlatform.Domain.csproj" />
   <Project Path="NotaryPlatform.Infrastructure/NotaryPlatform.Infrastructure.csproj" />
 </Solution>
