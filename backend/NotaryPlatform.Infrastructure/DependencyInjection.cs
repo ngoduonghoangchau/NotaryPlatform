@@ -26,6 +26,7 @@ using NotaryPlatform.Infrastructure.Persistence;
 using NotaryPlatform.Infrastructure.Persistence.DbContexts;
 using NotaryPlatform.Infrastructure.Persistence.Interceptors;
 using NotaryPlatform.Infrastructure.Persistence.Repositories.Core;
+using NotaryPlatform.Infrastructure.Persistence.Seed.Orchestration;
 using NotaryPlatform.Infrastructure.Services.Authentication;
 using NotaryPlatform.Infrastructure.Services.External.Firestore;
 using NotaryPlatform.Infrastructure.Services.Files;
@@ -48,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<IDateTime, SystemDateTimeService>();
 
         AddDatabase(services, configuration);
+        services.AddCoreSeeding(configuration);
         AddAuthentication(services, configuration);
         services.AddNotaryPlatformAuthorization();
         AddCaching(services, configuration);
