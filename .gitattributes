@@ -1,0 +1,9 @@
+# Files consumed on Linux must keep LF endings even when checked out on Windows,
+# otherwise the shell script / Docker build breaks with "bad interpreter" errors.
+*.sh          text eol=lf
+Dockerfile    text eol=lf
+Caddyfile     text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+.dockerignore text eol=lf
+.env.example  text eol=lf
