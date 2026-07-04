@@ -7,7 +7,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using CloudinaryDotNet;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using NotaryPlatform.Application.Abstractions.Authentication;
@@ -211,6 +213,24 @@ public static class DependencyInjection
 
             services.AddHttpClient(nameof(CloudFileStorageService));
             services.AddScoped<IFileStorageService, CloudFileStorageService>();
+        }
+        else if (provider.Equals("cloudinary", StringComparison.OrdinalIgnoreCase))
+        {
+            // Cloudinary — free-tier-friendly object storage. Files are uploaded PRIVATE and
+            // served via short-lived signed URLs (see CloudinaryFileStorageService).
+            services.Configure<CloudinarySettings>(
+                configuration.GetSection(CloudinarySettings.SectionName));
+
+            // One shared, thread-safe Cloudinary client for the whole app.
+            services.AddSingleton(sp =>
+            {
+                var c = sp.GetRequiredService<IOptions<CloudinarySettings>>().Value;
+                return new Cloudinary(new Account(c.CloudName, c.ApiKey, c.ApiSecret))
+                {
+                    Api = { Secure = true },
+                };
+            });
+            services.AddScoped<IFileStorageService, CloudinaryFileStorageService>();
         }
         else
         {
