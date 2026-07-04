@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using DotNetEnv;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models;
 using NotaryPlatform.API.Middleware;
@@ -93,5 +94,17 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// ── Health endpoints (Docker/Caddy healthchecks, uptime monitors, orchestration) ──
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false                               // liveness: process is up, no dependency checks
+});
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")    // readiness: PostgreSQL + Redis reachable
+});
+app.MapHealthChecks("/health/detail", new HealthCheckOptions())
+    .RequireAuthorization();                             // all checks incl. Firebase — authenticated callers only
 
 app.Run();
