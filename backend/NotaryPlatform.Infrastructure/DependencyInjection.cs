@@ -249,10 +249,18 @@ public static class DependencyInjection
         services.Configure<SmtpSettings>(configuration.GetSection(SmtpSettings.SectionName));
         services.AddScoped<IEmailSender, EmailSender>();
 
-        // SMS — Twilio REST API via HttpClient
-        services.Configure<SmsSettings>(configuration.GetSection(SmsSettings.SectionName));
-        services.AddHttpClient(nameof(SmsSender));
-        services.AddScoped<ISmsSender, SmsSender>();
+        // SMS — Twilio REST API via HttpClient, or a no-op sender when SMS is disabled.
+        // Set Sms__Disabled=true (zero-budget / no provider) to suppress SMS without touching callers.
+        if (configuration.GetValue<bool>("Sms:Disabled"))
+        {
+            services.AddScoped<ISmsSender, NullSmsSender>();
+        }
+        else
+        {
+            services.Configure<SmsSettings>(configuration.GetSection(SmsSettings.SectionName));
+            services.AddHttpClient(nameof(SmsSender));
+            services.AddScoped<ISmsSender, SmsSender>();
+        }
 
         // Push — Firebase Cloud Messaging
         // LEARNING — DIP fix: inject FirebaseMessaging instead of static FirebaseMessaging.DefaultInstance.
