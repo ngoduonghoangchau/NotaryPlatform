@@ -1,0 +1,29 @@
+# Keep the Docker build context small and free of secrets.
+# Only backend/ source is needed to build the image.
+
+**/bin/
+**/obj/
+.git/
+.github/
+.vs/
+.vscode/
+.claude/
+docs/
+scripts/
+*.md
+
+# Never send secrets or local config into the build context
+**/.env
+**/.env.*
+secrets/
+backups/
+*.pgdump
+*.tgz
+**/appsettings.*.json
+**/*.user
+
+# Infra files themselves aren't needed inside the image
+Dockerfile
+.dockerignore
+docker-compose*.yml
+Caddyfile

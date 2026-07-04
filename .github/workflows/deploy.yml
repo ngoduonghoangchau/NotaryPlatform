@@ -1,0 +1,58 @@
+name: CI · Deploy
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# Least privilege: the workflow only needs to read the repo.
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore backend/NotaryPlatform.API/NotaryPlatform.API.csproj
+
+      - name: Build
+        run: dotnet build backend/NotaryPlatform.API/NotaryPlatform.API.csproj --no-restore -c Release
+
+      - name: Test
+        run: dotnet test backend/NotaryPlatform.Application.Tests/NotaryPlatform.Application.Tests.csproj -c Release
+
+  deploy:
+    needs: build-test
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    # Optional: create a "production" Environment in repo settings to add a manual approval gate.
+    environment: production
+    steps:
+      - name: Deploy over SSH (git pull + rebuild on the box)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            git pull --ff-only
+            docker compose up -d --build
+            docker image prune -f
+
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   DEPLOY_HOST     — box IP/hostname (or a Cloudflare Tunnel SSH target)
+#   DEPLOY_USER     — SSH user
+#   DEPLOY_SSH_KEY  — private key (the box holds the matching public key)
+#   DEPLOY_PATH     — repo path on the box, e.g. /home/app/notaryplatform

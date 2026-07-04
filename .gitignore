@@ -4,6 +4,7 @@
 .env
 .env.*
 *.env
+!.env.example
 *.secret
 *.secrets
 *.key
@@ -31,6 +32,13 @@ appsettings.*.config
 secrets.json
 secret.json
 config.local.*
+
+# Infrastructure secrets & backup artifacts (zero-budget deploy)
+secrets/
+backups/
+*.pgdump
+*.tgz
+logs/
 *.local
 
 # Logs
@@ -185,3 +193,11 @@ Tooling/
 frontend/docs/
 backend/docs/
 **/[fF]eatures/**/context.md
+
+# Deployment files that must be tracked (override the broad *.yml and Scripts/ rules above).
+!/scripts/
+!/scripts/**/*.sh
+!/scripts/**/*.sql
+!docker-compose.yml
+!docker-compose.*.yml
+!.github/workflows/*.yml
