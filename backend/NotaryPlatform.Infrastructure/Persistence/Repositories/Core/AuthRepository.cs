@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using NotaryPlatform.Application.Abstractions.Authentication;
 using NotaryPlatform.Domain.Features.Core.Enums;
 using NotaryPlatform.Infrastructure.Authorization.PermissionMaps;
@@ -16,8 +17,13 @@ namespace NotaryPlatform.Infrastructure.Persistence.Repositories.Core;
 public sealed class AuthRepository : IAuthRepository
 {
     private readonly NotaryPlatformDbContext _context;
+    private readonly IServiceScopeFactory _scopeFactory;
 
-    public AuthRepository(NotaryPlatformDbContext context) => _context = context;
+    public AuthRepository(NotaryPlatformDbContext context, IServiceScopeFactory scopeFactory)
+    {
+        _context = context;
+        _scopeFactory = scopeFactory;
+    }
 
     public async Task<Guid?> FindActiveTenantIdByCodeAsync(string tenantCode, CancellationToken cancellationToken = default)
     {
@@ -120,5 +126,88 @@ public sealed class AuthRepository : IAuthRepository
         var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId, cancellationToken);
         if (user is not null)
             user.LastLoginAt = whenUtc;
+    }
+
+    public async Task<RefreshTokenRecord?> FindRefreshTokenByHashAsync(string tokenHash, CancellationToken cancellationToken = default)
+    {
+        return await _context.RefreshTokens
+            .AsNoTracking()
+            .Where(rt => rt.TokenHash == tokenHash)
+            .Select(rt => new RefreshTokenRecord(
+                rt.RefreshTokenId,
+                rt.TenantId,
+                rt.UserId,
+                rt.ExpiresAt,
+                rt.RevokedAt,
+                rt.DeviceName))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<ActiveUserRecord?> FindActiveUserByIdAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Users
+            .AsNoTracking()
+            .Where(u => u.UserId == userId
+                        && u.TenantId == tenantId
+                        && u.DeletedAt == null)
+            .Select(u => new ActiveUserRecord(
+                u.UserId,
+                u.TenantId,
+                u.BranchId,
+                u.Email,
+                u.DisplayName ?? (u.FirstName + " " + u.LastName),
+                u.status))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task RotateRefreshTokenAsync(Guid oldTokenId, RefreshTokenCreate newToken, CancellationToken cancellationToken = default)
+    {
+        // Insert the new row first so the old one can point at it (the rotation chain). CreatedAt /
+        // UpdatedAt are stamped by AuditingSaveChangesInterceptor on commit.
+        var newTokenId = Guid.NewGuid();
+        await _context.RefreshTokens.AddAsync(new RefreshToken
+        {
+            RefreshTokenId = newTokenId,
+            TenantId = newToken.TenantId,
+            UserId = newToken.UserId,
+            TokenHash = newToken.TokenHash,
+            DeviceName = newToken.DeviceName,
+            UserAgent = newToken.UserAgent,
+            CreatedIp = newToken.CreatedIp,
+            ExpiresAt = newToken.ExpiresAtUtc,
+        }, cancellationToken);
+
+        var old = await _context.RefreshTokens
+            .FirstOrDefaultAsync(rt => rt.RefreshTokenId == oldTokenId, cancellationToken);
+        if (old is not null)
+        {
+            var now = DateTime.UtcNow;
+            old.RevokedAt = now;
+            old.LastUsedAt = now;
+            old.ReplacedByTokenId = newTokenId;
+        }
+        // Tracked writes — persisted by TransactionBehavior's commit.
+    }
+
+    public async Task RevokeAllRefreshTokensForUserAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        // BR-AUTH-04 theft response. The caller revokes then rejects the request, which rolls back the
+        // ambient request transaction — so this revocation MUST persist independently. Run it on a fresh
+        // scope (its own DbContext + connection) and commit it here, outside that transaction.
+        using var scope = _scopeFactory.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<NotaryPlatformDbContext>();
+
+        var activeTokens = await context.RefreshTokens
+            .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
+            .ToListAsync(cancellationToken);
+
+        if (activeTokens.Count == 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        foreach (var token in activeTokens)
+            token.RevokedAt = now;
+
+        await context.SaveChangesAsync(cancellationToken);
     }
 }

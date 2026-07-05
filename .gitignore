@@ -201,3 +201,6 @@ backend/docs/
 !docker-compose.yml
 !docker-compose.*.yml
 !.github/workflows/*.yml
+docker-compose.override.yml
+
+**/seed/**
