@@ -1,6 +1,6 @@
 using FirebaseAdmin.Messaging;
 using Microsoft.Extensions.Logging;
-using NotaryPlatform.Application.Common.Interfaces;
+using NotaryPlatform.Application.Abstractions.Messaging;
 using FcmMessage = FirebaseAdmin.Messaging.Message;
 using FcmNotification = FirebaseAdmin.Messaging.Notification;
 

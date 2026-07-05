@@ -1,27 +1,44 @@
 using System.Text;
 using FirebaseAdmin;
 using FirebaseAdmin.Messaging;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using CloudinaryDotNet;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using NotaryPlatform.Application.Common.Interfaces;
+using Npgsql;
+using NotaryPlatform.Application.Abstractions.Authentication;
+using NotaryPlatform.Application.Abstractions.Authorization;
+using NotaryPlatform.Application.Abstractions.BackgroundJobs;
+using NotaryPlatform.Application.Abstractions.Caching;
+using NotaryPlatform.Application.Abstractions.Messaging;
+using NotaryPlatform.Application.Abstractions.Persistence;
+// using NotaryPlatform.Application.Features.Core.Auth;
 using NotaryPlatform.Infrastructure.Authorization.Policies;
 using NotaryPlatform.Infrastructure.Caching;
 using NotaryPlatform.Infrastructure.HealthChecks;
 using NotaryPlatform.Infrastructure.Observability.OpenTelemetry;
 using NotaryPlatform.Infrastructure.Observability.Serilog;
+using NotaryPlatform.Infrastructure.Persistence;
 using NotaryPlatform.Infrastructure.Persistence.DbContexts;
 using NotaryPlatform.Infrastructure.Persistence.Interceptors;
+using NotaryPlatform.Infrastructure.Persistence.Repositories.Core;
+using NotaryPlatform.Infrastructure.Persistence.Seed.Orchestration;
 using NotaryPlatform.Infrastructure.Services.Authentication;
 using NotaryPlatform.Infrastructure.Services.External.Firestore;
 using NotaryPlatform.Infrastructure.Services.Files;
+using NotaryPlatform.Infrastructure.Services;
 using NotaryPlatform.Infrastructure.Services.Jobs;
 using NotaryPlatform.Infrastructure.Services.Messaging;
 using Serilog.Core;
 using StackExchange.Redis;
+using NotaryPlatform.Application.Abstractions.Storage;
+using NotaryPlatform.Application.Abstractions.System;
 
 namespace NotaryPlatform.Infrastructure;
 
@@ -31,7 +48,10 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddScoped<IDateTime, SystemDateTimeService>();
+
         AddDatabase(services, configuration);
+        services.AddCoreSeeding(configuration);
         AddAuthentication(services, configuration);
         services.AddNotaryPlatformAuthorization();
         AddCaching(services, configuration);
@@ -39,7 +59,7 @@ public static class DependencyInjection
         AddObservability(services, configuration);
         AddFileStorage(services, configuration);
         AddMessaging(services, configuration);
-        AddJobs(services);
+        AddJobs(services, configuration);
         AddExternalServices(services, configuration);
 
         return services;
@@ -52,6 +72,21 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException(
                 "Connection string 'DefaultConnection' was not found.");
+
+        // ── Npgsql data source with CLR ↔ PostgreSQL enum mappings ────────────
+        //
+        // LEARNING — why map enums here and not only via modelBuilder.HasPostgresEnum(...)?
+        //   HasPostgresEnum(...) teaches EF about the enum for *migrations* only. For
+        //   runtime query translation and parameter binding, the CLR enum must be
+        //   registered on the Npgsql data source — otherwise EF sends the value as a
+        //   plain integer and PostgreSQL rejects it:
+        //     42883: operator does not exist: core.user_status = integer
+        //   NpgsqlEnumMappings maps every Domain enum (by reflection) so any feature that
+        //   queries an enum column works without adding a line here per enum.
+        var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+        NpgsqlEnumMappings.MapDomainEnums(dataSourceBuilder);
+        var dataSource = dataSourceBuilder.Build();
+        services.AddSingleton(dataSource);
 
         // ── EF Core interceptors (all Singleton) ──────────────────────────────
         //
@@ -84,7 +119,8 @@ public static class DependencyInjection
         // so we can resolve the singleton interceptors registered above.
         services.AddDbContext<NotaryPlatformDbContext>((sp, options) =>
             options
-                .UseNpgsql(connectionString)
+                .UseNpgsql(dataSource)
+                .UseSnakeCaseNamingConvention()
                 .AddInterceptors(
                     sp.GetRequiredService<OutboxSaveChangesInterceptor>(),
                     sp.GetRequiredService<AuditingSaveChangesInterceptor>(),
@@ -94,6 +130,9 @@ public static class DependencyInjection
                     sp.GetRequiredService<DbConnectionResilienceInterceptor>(),
                     sp.GetRequiredService<TransactionLifecycleInterceptor>()
                 ));
+
+        services.AddScoped<IUnitOfWork>(sp =>
+            sp.GetRequiredService<NotaryPlatformDbContext>());
     }
 
     // ── Authentication ────────────────────────────────────────────────────────────
@@ -103,9 +142,9 @@ public static class DependencyInjection
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
 
         var jwtSection = configuration.GetSection(JwtSettings.SectionName);
-        var secretKey  = jwtSection["SecretKey"]  ?? throw new InvalidOperationException("Jwt:SecretKey is required.");
-        var issuer     = jwtSection["Issuer"]      ?? throw new InvalidOperationException("Jwt:Issuer is required.");
-        var audience   = jwtSection["Audience"]    ?? throw new InvalidOperationException("Jwt:Audience is required.");
+        var secretKey = jwtSection["SecretKey"] ?? throw new InvalidOperationException("Jwt:SecretKey is required.");
+        var issuer = jwtSection["Issuer"] ?? throw new InvalidOperationException("Jwt:Issuer is required.");
+        var audience = jwtSection["Audience"] ?? throw new InvalidOperationException("Jwt:Audience is required.");
 
         // LEARNING — JWT Bearer middleware:
         //   Validates the Authorization: Bearer <token> header on every request.
@@ -116,15 +155,15 @@ public static class DependencyInjection
             {
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    ValidateIssuer           = true,
-                    ValidateAudience         = true,
-                    ValidateLifetime         = true,
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
-                    ValidIssuer              = issuer,
-                    ValidAudience            = audience,
-                    IssuerSigningKey         = new SymmetricSecurityKey(
+                    ValidIssuer = issuer,
+                    ValidAudience = audience,
+                    IssuerSigningKey = new SymmetricSecurityKey(
                         Encoding.UTF8.GetBytes(secretKey)),
-                    ClockSkew                = TimeSpan.Zero
+                    ClockSkew = TimeSpan.Zero
                 };
             });
 
@@ -138,6 +177,15 @@ public static class DependencyInjection
 
         // IPermissionService — Scoped: wraps scoped NotaryPlatformDbContext.
         services.AddScoped<IPermissionService, PermissionService>();
+
+        // IPasswordHasher — Scoped: BCrypt, stateless but scoped for consistency.
+        services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
+
+        // IAuthRepository — Scoped: wraps scoped NotaryPlatformDbContext (reads generated entities directly).
+        services.AddScoped<IAuthRepository, AuthRepository>();
+
+        // ILoginAttemptTracker — Scoped: Redis-backed failed-login lockout counter (BR-AUTH-02).
+        services.AddScoped<ILoginAttemptTracker, LoginAttemptTracker>();
     }
 
     // ── File Storage ──────────────────────────────────────────────────────────────
@@ -166,6 +214,24 @@ public static class DependencyInjection
             services.AddHttpClient(nameof(CloudFileStorageService));
             services.AddScoped<IFileStorageService, CloudFileStorageService>();
         }
+        else if (provider.Equals("cloudinary", StringComparison.OrdinalIgnoreCase))
+        {
+            // Cloudinary — free-tier-friendly object storage. Files are uploaded PRIVATE and
+            // served via short-lived signed URLs (see CloudinaryFileStorageService).
+            services.Configure<CloudinarySettings>(
+                configuration.GetSection(CloudinarySettings.SectionName));
+
+            // One shared, thread-safe Cloudinary client for the whole app.
+            services.AddSingleton(sp =>
+            {
+                var c = sp.GetRequiredService<IOptions<CloudinarySettings>>().Value;
+                return new Cloudinary(new Account(c.CloudName, c.ApiKey, c.ApiSecret))
+                {
+                    Api = { Secure = true },
+                };
+            });
+            services.AddScoped<IFileStorageService, CloudinaryFileStorageService>();
+        }
         else
         {
             services.Configure<LocalStorageSettings>(
@@ -183,10 +249,18 @@ public static class DependencyInjection
         services.Configure<SmtpSettings>(configuration.GetSection(SmtpSettings.SectionName));
         services.AddScoped<IEmailSender, EmailSender>();
 
-        // SMS — Twilio REST API via HttpClient
-        services.Configure<SmsSettings>(configuration.GetSection(SmsSettings.SectionName));
-        services.AddHttpClient(nameof(SmsSender));
-        services.AddScoped<ISmsSender, SmsSender>();
+        // SMS — Twilio REST API via HttpClient, or a no-op sender when SMS is disabled.
+        // Set Sms__Disabled=true (zero-budget / no provider) to suppress SMS without touching callers.
+        if (configuration.GetValue<bool>("Sms:Disabled"))
+        {
+            services.AddScoped<ISmsSender, NullSmsSender>();
+        }
+        else
+        {
+            services.Configure<SmsSettings>(configuration.GetSection(SmsSettings.SectionName));
+            services.AddHttpClient(nameof(SmsSender));
+            services.AddScoped<ISmsSender, SmsSender>();
+        }
 
         // Push — Firebase Cloud Messaging
         // LEARNING — DIP fix: inject FirebaseMessaging instead of static FirebaseMessaging.DefaultInstance.
@@ -197,17 +271,22 @@ public static class DependencyInjection
 
     // ── Jobs ──────────────────────────────────────────────────────────────────────
 
-    private static void AddJobs(IServiceCollection services)
+    private static void AddJobs(IServiceCollection services, IConfiguration configuration)
     {
-        // HangfireService — thin facade over IBackgroundJobClient + IRecurringJobManager.
-        // Hangfire registers its own IBackgroundJobClient and IRecurringJobManager;
-        // ensure AddHangfire() is called in Program.cs before AddInfrastructure().
+        var connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException(
+                "Connection string 'DefaultConnection' was not found.");
+
+        services.AddHangfire(config => config
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connectionString)));
+
+        services.AddHangfireServer();
+
         services.AddScoped<HangfireService>();
-
-        // IJobScheduler — business-intent API for Application use cases.
         services.AddScoped<IJobScheduler, JobScheduler>();
-
-        // RecurringJobRegistrar — called once at startup from Program.cs to register cron jobs.
         services.AddScoped<RecurringJobRegistrar>();
     }
 

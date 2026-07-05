@@ -1,0 +1,31 @@
+# NotaryPlatform reverse proxy — automatic HTTPS + security headers.
+#
+# SITE_ADDRESS is passed in from docker-compose (.env):
+#   • a domain (e.g. notary.example.com) → Caddy fetches a real Let's Encrypt cert
+#   • ":443"                              → Caddy uses a self-signed internal cert (testing)
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# TLS terminates here; forward plain HTTP to the API on the internal network.
+	reverse_proxy api:8080
+
+	# Security headers on every response.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options    "nosniff"
+		X-Frame-Options           "DENY"
+		Referrer-Policy           "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Defense in depth: hide admin / diagnostic surfaces from the public internet.
+	# (They are also auth-gated in the app — this is a second layer.)
+	@admin path /health/detail /health-ui* /hangfire*
+	respond @admin 404
+
+	log {
+		output stdout
+		format json
+	}
+}

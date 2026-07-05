@@ -1,0 +1,129 @@
+# NotaryPlatform — single-box, zero-budget production stack.
+#
+# Security posture:
+#   • Secrets come from a git-ignored .env (see .env.example). None are hardcoded.
+#   • ${VAR:?...} makes compose FAIL if a required secret is missing (no empty passwords).
+#   • Only Caddy publishes ports (80/443). Postgres, Redis and the API are reachable
+#     ONLY on the internal Docker network — never from the internet.
+#   • Every service runs with no-new-privileges and a memory cap.
+#
+# Bring up — pass --env-file pointing at the SAME file as `env_file:` below. Compose reads
+# ${VAR} interpolation from the project-root `.env` OR from --env-file, NEVER from a service's
+# `env_file:` (that only injects variables INTO the container). Your secrets live in
+# backend/NotaryPlatform.API/.env, so:
+#
+#   docker compose --env-file backend/NotaryPlatform.API/.env up -d --build
+#
+# (Alternative: put the same variables in a `.env` at the repo root and just run
+#  `docker compose up -d --build` — Compose auto-reads a root `.env`.)
+name: notaryplatform
+
+x-logging: &default-logging          # cap per-container logs so they can't fill the disk
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: notaryplatform-api:latest
+    env_file: .env                   # injects Jwt__*, Smtp__*, Firestore__*, Sms__* … into the container
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=NotaryDB;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:?set REDIS_PASSWORD in .env},abortConnect=false"
+      LocalStorage__BaseUrl: "${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in .env}"
+      # App config (Storage__Provider, Cloudinary__*, Sms__Disabled, Telemetry__*, Smtp__*,
+      # Firestore__*, Jwt__*) is injected from .env via `env_file` above — edit .env to change it.
+      # (Do NOT re-declare Storage__Provider here: values in `environment` override `env_file`.)
+      # Firebase (Firestore read model + FCM push) — OPTIONAL.
+      # To enable: place the service-account JSON at ./secrets/firebase.json, then
+      # uncomment the next line AND the matching volume mount below.
+      # GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase.json
+    volumes:
+      - app-uploads:/app/wwwroot/uploads
+      # - ./secrets/firebase.json:/run/secrets/firebase.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  postgres:
+    image: postgres:16-alpine        # ships pgcrypto + citext (contrib). Use postgis/postgis:16-3.4 once you add geo dispatch.
+    environment:
+      POSTGRES_DB: NotaryDB
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in your env file}
+    command: >
+      postgres -c shared_buffers=256MB -c effective_cache_size=512MB
+               -c work_mem=8MB -c max_connections=50 -c log_min_duration_statement=500
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      # Canonical schema — runs ONCE on first boot of an empty data volume.
+      - ./scripts/database/database.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d NotaryDB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server --requirepass ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+      --appendonly no --maxmemory 128mb --maxmemory-policy allkeys-lru
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 192m
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  caddy:                             # the ONLY publicly exposed service — free auto-HTTPS
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env (a domain, or :443 for a self-signed cert)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 96m
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  pg-data:
+  app-uploads:
+  caddy-data:
+  caddy-config:

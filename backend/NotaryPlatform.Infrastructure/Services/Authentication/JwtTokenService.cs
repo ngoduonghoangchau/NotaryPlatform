@@ -4,8 +4,9 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using NotaryPlatform.Application.Common.Interfaces;
-using NotaryPlatform.Application.Common.Models.Auth;
+using NotaryPlatform.Application.Abstractions.Authentication;
+using NotaryPlatform.Application.Shared.Interfaces;
+using NotaryPlatform.Application.Shared.Models.Auth;
 
 namespace NotaryPlatform.Infrastructure.Services.Authentication;
 
@@ -41,9 +42,10 @@ public sealed class JwtTokenService : IJwtTokenService
         _signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.SecretKey));
     }
 
-    public string CreateAccessToken(JwtTokenClaims claims)
+    public AccessTokenResult CreateAccessToken(JwtTokenClaims claims)
     {
         var now = DateTime.UtcNow;
+        var expiresAt = now.AddMinutes(_settings.AccessTokenExpiryMinutes);
         var jwtClaims = BuildClaims(claims);
 
         var token = new JwtSecurityToken(
@@ -51,10 +53,13 @@ public sealed class JwtTokenService : IJwtTokenService
             audience: _settings.Audience,
             claims: jwtClaims,
             notBefore: now,
-            expires: now.AddMinutes(_settings.AccessTokenExpiryMinutes),
+            expires: expiresAt,
             signingCredentials: new SigningCredentials(_signingKey, SecurityAlgorithms.HmacSha256));
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+
+        // Report the token's own expiry (single source of truth) — never a separate constant.
+        return new AccessTokenResult(tokenString, new DateTimeOffset(expiresAt, TimeSpan.Zero));
     }
 
     public string CreateRefreshToken()

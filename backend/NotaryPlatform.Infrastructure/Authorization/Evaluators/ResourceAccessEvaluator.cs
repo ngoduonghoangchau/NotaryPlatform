@@ -1,4 +1,5 @@
-using NotaryPlatform.Application.Common.Interfaces;
+using NotaryPlatform.Application.Abstractions.Authentication;
+using NotaryPlatform.Application.Shared.Interfaces;
 
 namespace NotaryPlatform.Infrastructure.Authorization.Evaluators;
 

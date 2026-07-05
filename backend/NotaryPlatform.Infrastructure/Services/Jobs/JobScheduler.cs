@@ -1,4 +1,4 @@
-using NotaryPlatform.Application.Common.Interfaces;
+using NotaryPlatform.Application.Abstractions.BackgroundJobs;
 using NotaryPlatform.Infrastructure.Persistence.Outbox;
 
 namespace NotaryPlatform.Infrastructure.Services.Jobs;
