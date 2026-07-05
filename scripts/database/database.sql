@@ -12,11 +12,11 @@ CREATE SCHEMA IF NOT EXISTS core;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tenant_status') THEN
+    IF to_regtype('core.tenant_status') IS NULL THEN
         CREATE TYPE core.tenant_status AS ENUM ('active', 'suspended', 'closed');
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'organization_type') THEN
+    IF to_regtype('core.organization_type') IS NULL THEN
         CREATE TYPE core.organization_type AS ENUM (
             'company',
             'branch',
@@ -26,23 +26,23 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'organization_status') THEN
+    IF to_regtype('core.organization_status') IS NULL THEN
         CREATE TYPE core.organization_status AS ENUM ('active', 'inactive', 'suspended');
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'branch_status') THEN
+    IF to_regtype('core.branch_status') IS NULL THEN
         CREATE TYPE core.branch_status AS ENUM ('active', 'inactive', 'suspended');
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'region_status') THEN
+    IF to_regtype('core.region_status') IS NULL THEN
         CREATE TYPE core.region_status AS ENUM ('active', 'inactive');
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'team_status') THEN
+    IF to_regtype('core.team_status') IS NULL THEN
         CREATE TYPE core.team_status AS ENUM ('active', 'inactive');
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_status') THEN
+    IF to_regtype('core.user_status') IS NULL THEN
         CREATE TYPE core.user_status AS ENUM ('invited', 'active', 'inactive', 'locked', 'archived');
     END IF;
 END $$;
@@ -605,7 +605,7 @@ CREATE SCHEMA IF NOT EXISTS identity;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notary_status') THEN
+    IF to_regtype('identity.notary_status') IS NULL THEN
         CREATE TYPE identity.notary_status AS ENUM (
             'active',
             'inactive',
@@ -616,7 +616,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'commission_status') THEN
+    IF to_regtype('identity.commission_status') IS NULL THEN
         CREATE TYPE identity.commission_status AS ENUM (
             'pending',
             'active',
@@ -627,7 +627,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'bond_status') THEN
+    IF to_regtype('identity.bond_status') IS NULL THEN
         CREATE TYPE identity.bond_status AS ENUM (
             'valid',
             'expiring',
@@ -637,7 +637,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'insurance_status') THEN
+    IF to_regtype('identity.insurance_status') IS NULL THEN
         CREATE TYPE identity.insurance_status AS ENUM (
             'valid',
             'expiring',
@@ -647,7 +647,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'document_status') THEN
+    IF to_regtype('identity.document_status') IS NULL THEN
         CREATE TYPE identity.document_status AS ENUM (
             'uploaded',
             'verified',
@@ -657,7 +657,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'capability_code') THEN
+    IF to_regtype('identity.capability_code') IS NULL THEN
         CREATE TYPE identity.capability_code AS ENUM (
             'acknowledgment',
             'jurat',
@@ -669,7 +669,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'history_action_type') THEN
+    IF to_regtype('identity.history_action_type') IS NULL THEN
         CREATE TYPE identity.history_action_type AS ENUM (
             'create',
             'update',
@@ -1372,11 +1372,11 @@ CREATE SCHEMA IF NOT EXISTS crm;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'customer_type') THEN
+    IF to_regtype('crm.customer_type') IS NULL THEN
         CREATE TYPE crm.customer_type AS ENUM ('individual', 'company');
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'customer_status') THEN
+    IF to_regtype('crm.customer_status') IS NULL THEN
         CREATE TYPE crm.customer_status AS ENUM (
             'active',
             'inactive',
@@ -1385,7 +1385,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contact_status') THEN
+    IF to_regtype('crm.contact_status') IS NULL THEN
         CREATE TYPE crm.contact_status AS ENUM (
             'active',
             'inactive',
@@ -1393,7 +1393,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contact_role') THEN
+    IF to_regtype('crm.contact_role') IS NULL THEN
         CREATE TYPE crm.contact_role AS ENUM (
             'primary',
             'billing',
@@ -1404,7 +1404,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'segment_type') THEN
+    IF to_regtype('crm.segment_type') IS NULL THEN
         CREATE TYPE crm.segment_type AS ENUM (
             'vip',
             'high_volume',
@@ -1414,7 +1414,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'document_status') THEN
+    IF to_regtype('crm.document_status') IS NULL THEN
         CREATE TYPE crm.document_status AS ENUM (
             'uploaded',
             'verified',
@@ -1423,7 +1423,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pricing_model') THEN
+    IF to_regtype('crm.pricing_model') IS NULL THEN
         CREATE TYPE crm.pricing_model AS ENUM (
             'fixed',
             'volume_based',
@@ -1433,7 +1433,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pricing_rule_type') THEN
+    IF to_regtype('crm.pricing_rule_type') IS NULL THEN
         CREATE TYPE crm.pricing_rule_type AS ENUM (
             'base_rate',
             'volume_tier',
@@ -1443,7 +1443,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contract_status') THEN
+    IF to_regtype('crm.contract_status') IS NULL THEN
         CREATE TYPE crm.contract_status AS ENUM (
             'draft',
             'active',
@@ -1454,7 +1454,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'sla_status') THEN
+    IF to_regtype('crm.sla_status') IS NULL THEN
         CREATE TYPE crm.sla_status AS ENUM (
             'draft',
             'active',
@@ -1464,7 +1464,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'note_visibility') THEN
+    IF to_regtype('crm.note_visibility') IS NULL THEN
         CREATE TYPE crm.note_visibility AS ENUM (
             'private',
             'team',
@@ -2468,7 +2468,7 @@ CREATE SCHEMA IF NOT EXISTS operations;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'service_mode') THEN
+    IF to_regtype('operations.service_mode') IS NULL THEN
         CREATE TYPE operations.service_mode AS ENUM (
             'onsite',
             'mobile',
@@ -2477,7 +2477,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_priority') THEN
+    IF to_regtype('operations.job_priority') IS NULL THEN
         CREATE TYPE operations.job_priority AS ENUM (
             'low',
             'normal',
@@ -2487,7 +2487,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_request_status') THEN
+    IF to_regtype('operations.job_request_status') IS NULL THEN
         CREATE TYPE operations.job_request_status AS ENUM (
             'new',
             'triaged',
@@ -2500,7 +2500,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_status') THEN
+    IF to_regtype('operations.job_status') IS NULL THEN
         CREATE TYPE operations.job_status AS ENUM (
             'draft',
             'scheduled',
@@ -2514,7 +2514,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'assignment_status') THEN
+    IF to_regtype('operations.assignment_status') IS NULL THEN
         CREATE TYPE operations.assignment_status AS ENUM (
             'proposed',
             'assigned',
@@ -2526,7 +2526,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'assignment_role') THEN
+    IF to_regtype('operations.assignment_role') IS NULL THEN
         CREATE TYPE operations.assignment_role AS ENUM (
             'primary',
             'backup',
@@ -2535,7 +2535,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'schedule_block_type') THEN
+    IF to_regtype('operations.schedule_block_type') IS NULL THEN
         CREATE TYPE operations.schedule_block_type AS ENUM (
             'job',
             'shift',
@@ -2547,7 +2547,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'availability_rule_type') THEN
+    IF to_regtype('operations.availability_rule_type') IS NULL THEN
         CREATE TYPE operations.availability_rule_type AS ENUM (
             'working_hours',
             'preferred_hours',
@@ -2557,7 +2557,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'shift_request_status') THEN
+    IF to_regtype('operations.shift_request_status') IS NULL THEN
         CREATE TYPE operations.shift_request_status AS ENUM (
             'pending',
             'approved',
@@ -2567,7 +2567,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'dispatch_run_status') THEN
+    IF to_regtype('operations.dispatch_run_status') IS NULL THEN
         CREATE TYPE operations.dispatch_run_status AS ENUM (
             'queued',
             'running',
@@ -2577,7 +2577,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'dispatch_candidate_status') THEN
+    IF to_regtype('operations.dispatch_candidate_status') IS NULL THEN
         CREATE TYPE operations.dispatch_candidate_status AS ENUM (
             'eligible',
             'preferred',
@@ -2587,7 +2587,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'dispatch_rule_type') THEN
+    IF to_regtype('operations.dispatch_rule_type') IS NULL THEN
         CREATE TYPE operations.dispatch_rule_type AS ENUM (
             'distance',
             'service_type',
@@ -2599,7 +2599,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'timeline_event_type') THEN
+    IF to_regtype('operations.timeline_event_type') IS NULL THEN
         CREATE TYPE operations.timeline_event_type AS ENUM (
             'status_change',
             'assignment_change',
@@ -2613,7 +2613,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reminder_channel') THEN
+    IF to_regtype('operations.reminder_channel') IS NULL THEN
         CREATE TYPE operations.reminder_channel AS ENUM (
             'email',
             'sms',
@@ -2621,7 +2621,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reminder_status') THEN
+    IF to_regtype('operations.reminder_status') IS NULL THEN
         CREATE TYPE operations.reminder_status AS ENUM (
             'pending',
             'queued',
@@ -2632,7 +2632,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reminder_recipient_type') THEN
+    IF to_regtype('operations.reminder_recipient_type') IS NULL THEN
         CREATE TYPE operations.reminder_recipient_type AS ENUM (
             'contact',
             'user',
@@ -2640,7 +2640,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notification_scope') THEN
+    IF to_regtype('operations.notification_scope') IS NULL THEN
         CREATE TYPE operations.notification_scope AS ENUM (
             'internal',
             'customer',
@@ -3983,7 +3983,7 @@ CREATE SCHEMA IF NOT EXISTS notarial;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notarial_act_type') THEN
+    IF to_regtype('notarial.notarial_act_type') IS NULL THEN
         CREATE TYPE notarial.notarial_act_type AS ENUM (
             'acknowledgment',
             'jurat',
@@ -3999,7 +3999,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notarial_act_status') THEN
+    IF to_regtype('notarial.notarial_act_status') IS NULL THEN
         CREATE TYPE notarial.notarial_act_status AS ENUM (
             'draft',
             'pending_verification',
@@ -4014,7 +4014,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'signer_role') THEN
+    IF to_regtype('notarial.signer_role') IS NULL THEN
         CREATE TYPE notarial.signer_role AS ENUM (
             'signer',
             'principal',
@@ -4026,7 +4026,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'identity_verification_method') THEN
+    IF to_regtype('notarial.identity_verification_method') IS NULL THEN
         CREATE TYPE notarial.identity_verification_method AS ENUM (
             'physical_presence',
             'government_id',
@@ -4039,7 +4039,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'verification_result') THEN
+    IF to_regtype('notarial.verification_result') IS NULL THEN
         CREATE TYPE notarial.verification_result AS ENUM (
             'pending',
             'passed',
@@ -4050,7 +4050,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'appearance_type') THEN
+    IF to_regtype('notarial.appearance_type') IS NULL THEN
         CREATE TYPE notarial.appearance_type AS ENUM (
             'physical',
             'remote',
@@ -4058,7 +4058,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'execution_status') THEN
+    IF to_regtype('notarial.execution_status') IS NULL THEN
         CREATE TYPE notarial.execution_status AS ENUM (
             'not_started',
             'in_progress',
@@ -4068,7 +4068,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'certificate_status') THEN
+    IF to_regtype('notarial.certificate_status') IS NULL THEN
         CREATE TYPE notarial.certificate_status AS ENUM (
             'draft',
             'generated',
@@ -4079,7 +4079,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'document_link_type') THEN
+    IF to_regtype('notarial.document_link_type') IS NULL THEN
         CREATE TYPE notarial.document_link_type AS ENUM (
             'subject_document',
             'supporting_document',
@@ -4090,7 +4090,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'act_event_type') THEN
+    IF to_regtype('notarial.act_event_type') IS NULL THEN
         CREATE TYPE notarial.act_event_type AS ENUM (
             'create',
             'update',
@@ -4924,7 +4924,7 @@ CREATE SCHEMA IF NOT EXISTS journal;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'journal_entry_status') THEN
+    IF to_regtype('journal.journal_entry_status') IS NULL THEN
         CREATE TYPE journal.journal_entry_status AS ENUM (
             'draft',
             'pending',
@@ -4935,7 +4935,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'journal_field_source') THEN
+    IF to_regtype('journal.journal_field_source') IS NULL THEN
         CREATE TYPE journal.journal_field_source AS ENUM (
             'auto_populated',
             'manual',
@@ -4944,7 +4944,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'journal_verification_method') THEN
+    IF to_regtype('journal.journal_verification_method') IS NULL THEN
         CREATE TYPE journal.journal_verification_method AS ENUM (
             'physical_presence',
             'remote_online_notarization',
@@ -4955,7 +4955,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'journal_capture_type') THEN
+    IF to_regtype('journal.journal_capture_type') IS NULL THEN
         CREATE TYPE journal.journal_capture_type AS ENUM (
             'signature',
             'thumbprint',
@@ -4963,7 +4963,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'journal_export_format') THEN
+    IF to_regtype('journal.journal_export_format') IS NULL THEN
         CREATE TYPE journal.journal_export_format AS ENUM (
             'pdf',
             'csv',
@@ -4972,7 +4972,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'journal_export_status') THEN
+    IF to_regtype('journal.journal_export_status') IS NULL THEN
         CREATE TYPE journal.journal_export_status AS ENUM (
             'queued',
             'generated',
@@ -4982,7 +4982,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'journal_transfer_type') THEN
+    IF to_regtype('journal.journal_transfer_type') IS NULL THEN
         CREATE TYPE journal.journal_transfer_type AS ENUM (
             'internal_custodian',
             'regulator',
@@ -4992,7 +4992,7 @@ BEGIN
         );
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'journal_audit_event_type') THEN
+    IF to_regtype('journal.journal_audit_event_type') IS NULL THEN
         CREATE TYPE journal.journal_audit_event_type AS ENUM (
             'create',
             'update',
