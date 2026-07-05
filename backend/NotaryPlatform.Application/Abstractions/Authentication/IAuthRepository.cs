@@ -48,6 +48,36 @@ public interface IAuthRepository
 
     /// <summary>Stamps <c>users.last_login_at</c>. Tracked update; persisted on transaction commit.</summary>
     Task StampLastLoginAsync(Guid userId, DateTime whenUtc, CancellationToken cancellationToken = default);
+
+    // ── UC-AUTH-02 · Refresh Access Token ──────────────────────────────────────
+
+    /// <summary>
+    /// Loads the session snapshot for a refresh token by its SHA-256 hash, or null if no row matches.
+    /// Returns a read record (never a tracked entity); the caller decides validity from
+    /// <see cref="RefreshTokenRecord.RevokedAtUtc"/> / <see cref="RefreshTokenRecord.ExpiresAtUtc"/>.
+    /// </summary>
+    Task<RefreshTokenRecord?> FindRefreshTokenByHashAsync(string tokenHash, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Loads the claim snapshot for a non-deleted user by id within a tenant, or null if absent.
+    /// Used to re-issue an access token on refresh; the caller checks <see cref="ActiveUserRecord.Status"/>.
+    /// </summary>
+    Task<ActiveUserRecord?> FindActiveUserByIdAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// BR-AUTH-04 rotation: inserts the new refresh-token row and marks the presented one revoked
+    /// (<c>revoked_at</c>, <c>last_used_at</c>) with <c>replaced_by_token_id</c> pointing at the new row.
+    /// Tracked writes — persisted by <c>TransactionBehavior</c>'s commit (no SaveChanges here).
+    /// </summary>
+    Task RotateRefreshTokenAsync(Guid oldTokenId, RefreshTokenCreate newToken, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// BR-AUTH-04 theft response: revokes ALL non-revoked refresh tokens for the user. It is called when
+    /// a rotated-out token is replayed and the request is then rejected — so the revocation MUST survive
+    /// that rejection. It therefore commits on its OWN unit of work, independent of the ambient request
+    /// transaction that is about to roll back.
+    /// </summary>
+    Task RevokeAllRefreshTokensForUserAsync(Guid userId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Minimal credential + status snapshot needed to authenticate a login attempt.</summary>
@@ -69,3 +99,21 @@ public sealed record RefreshTokenCreate(
     string? UserAgent,
     IPAddress? CreatedIp,
     DateTime ExpiresAtUtc);
+
+/// <summary>Session snapshot for a refresh token, keyed by its SHA-256 hash (UC-AUTH-02).</summary>
+public sealed record RefreshTokenRecord(
+    Guid RefreshTokenId,
+    Guid TenantId,
+    Guid UserId,
+    DateTime ExpiresAtUtc,
+    DateTime? RevokedAtUtc,
+    string? DeviceName);
+
+/// <summary>Claim snapshot needed to re-issue an access token on refresh (UC-AUTH-02).</summary>
+public sealed record ActiveUserRecord(
+    Guid UserId,
+    Guid TenantId,
+    Guid? BranchId,
+    string Email,
+    string DisplayName,
+    UserStatus Status);

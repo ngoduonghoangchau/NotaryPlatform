@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NotaryPlatform.Application.Features.Core.Commands.Login;
+using NotaryPlatform.Application.Features.Core.Commands.RefreshToken;
 using NotaryPlatform.Application.Features.Core.DTOs;
 using NotaryPlatform.Application.Shared.Models.Responses;
 
@@ -40,7 +41,28 @@ public sealed class AuthController : ControllerBase
 
         return Ok(ApiResponse<LoginResponse>.Ok(result, "Login successful."));
     }
+
+    /// <summary>
+    /// UC-AUTH-02 — exchange a valid refresh token for a new access token and a rotated refresh token.
+    /// Anonymous: the caller's access token has expired, so the refresh token is the presented credential.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("refresh")]
+    [ProducesResponseType(typeof(ApiResponse<RefreshTokenResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Refresh(
+        [FromBody] RefreshRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new RefreshTokenCommand(request.RefreshToken), cancellationToken);
+
+        return Ok(ApiResponse<RefreshTokenResponse>.Ok(result, "Token refreshed."));
+    }
 }
 
 /// <summary>Request body for <c>POST /api/v1/auth/login</c>.</summary>
 public sealed record LoginRequest(string TenantCode, string Email, string Password, string? DeviceName);
+
+/// <summary>Request body for <c>POST /api/v1/auth/refresh</c>.</summary>
+public sealed record RefreshRequest(string RefreshToken);
