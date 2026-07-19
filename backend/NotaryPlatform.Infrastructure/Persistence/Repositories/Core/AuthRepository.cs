@@ -210,4 +210,25 @@ public sealed class AuthRepository : IAuthRepository
 
         await context.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task RevokeRefreshTokensAsync(Guid userId, string? tokenHash, bool allDevices, CancellationToken cancellationToken = default)
+    {
+        // UC-AUTH-03 logout. Success path ⇒ tracked writes committed by TransactionBehavior (contrast
+        // with RevokeAllRefreshTokensForUserAsync, which self-commits because it fires before a 401).
+        if (!allDevices && string.IsNullOrEmpty(tokenHash))
+            return;   // nothing to target (the validator requires a token unless allDevices)
+
+        var query = _context.RefreshTokens.Where(rt => rt.UserId == userId && rt.RevokedAt == null);
+
+        // Current-session logout also matches the presented hash; the userId filter is the ownership
+        // guard, so a caller can never revoke another user's token.
+        if (!allDevices)
+            query = query.Where(rt => rt.TokenHash == tokenHash);
+
+        var tokens = await query.ToListAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+        foreach (var token in tokens)
+            token.RevokedAt = now;
+    }
 }
