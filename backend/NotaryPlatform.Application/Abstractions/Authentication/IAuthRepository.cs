@@ -78,6 +78,17 @@ public interface IAuthRepository
     /// transaction that is about to roll back.
     /// </summary>
     Task RevokeAllRefreshTokensForUserAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    // ── UC-AUTH-03 · Logout ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// UC-AUTH-03 logout: revokes the caller's active refresh token(s). When <paramref name="allDevices"/>
+    /// is true, revokes every non-revoked token for the user; otherwise revokes the single non-revoked
+    /// token whose hash matches <paramref name="tokenHash"/> AND whose <c>user_id</c> equals
+    /// <paramref name="userId"/> (the ownership guard). Idempotent — a no-op if nothing matches.
+    /// Tracked writes committed by <c>TransactionBehavior</c> (this is a success path — no SaveChanges here).
+    /// </summary>
+    Task RevokeRefreshTokensAsync(Guid userId, string? tokenHash, bool allDevices, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Minimal credential + status snapshot needed to authenticate a login attempt.</summary>

@@ -14,6 +14,12 @@ public static class CacheKeys
     public static string PermissionMap(Guid tenantId) => $"Core:Permissions:{tenantId}";
     public static string OrgStructure(Guid tenantId) => $"Core:OrgTree:{tenantId}";
 
+    /// <summary>Resolved permission codes for a user within a tenant (invalidated on logout, UC-AUTH-03).</summary>
+    public static string UserPermissions(Guid tenantId, Guid userId) => $"Core:UserPermissions:{tenantId}:{userId}";
+
+    /// <summary>Role codes held by a user within a tenant (invalidated on logout, UC-AUTH-03).</summary>
+    public static string UserRoles(Guid tenantId, Guid userId) => $"Core:UserRoles:{tenantId}:{userId}";
+
     // ── Identity (Notary profiles) ─────────────────────────────────────────
     public static string NotaryPrefix(Guid tenantId) => $"Identity:Notary:{tenantId}";
     public static string NotaryById(Guid tenantId, Guid notaryId) => $"Identity:Notary:{tenantId}:{notaryId}";
