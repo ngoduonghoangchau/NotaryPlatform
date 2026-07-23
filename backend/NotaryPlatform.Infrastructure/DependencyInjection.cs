@@ -153,6 +153,11 @@ public static class DependencyInjection
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
+                // Read our custom claims ("uid"/"tid"/"bid"/"rid"/"permissions") under their own names.
+                // The default JWT handler remaps some inbound short claim types to long WS-* URIs, which
+                // made ICurrentUser.TenantId read null even though the token carried a "tid" claim.
+                options.MapInboundClaims = false;
+
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,

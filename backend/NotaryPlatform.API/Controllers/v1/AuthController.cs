@@ -2,6 +2,7 @@ using Asp.Versioning;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using NotaryPlatform.Application.Features.Core.Commands.ChangePassword;
 using NotaryPlatform.Application.Features.Core.Commands.Login;
 using NotaryPlatform.Application.Features.Core.Commands.Logout;
 using NotaryPlatform.Application.Features.Core.Commands.RefreshToken;
@@ -78,6 +79,24 @@ public sealed class AuthController : ControllerBase
 
         return Ok(ApiResponse.Ok("Logged out."));
     }
+
+    /// <summary>
+    /// UC-AUTH-04 — change your own password: re-verify the current password, enforce the complexity
+    /// policy on the new one, store it, and sign out every session (they must re-authenticate).
+    /// Requires a valid access token.
+    /// </summary>
+    [HttpPost("change-password")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChangePassword(
+        [FromBody] ChangePasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _sender.Send(new ChangePasswordCommand(request.CurrentPassword, request.NewPassword), cancellationToken);
+
+        return Ok(ApiResponse.Ok("Password changed."));
+    }
 }
 
 /// <summary>Request body for <c>POST /api/v1/auth/login</c>.</summary>
@@ -88,3 +107,6 @@ public sealed record RefreshRequest(string RefreshToken);
 
 /// <summary>Request body for <c>POST /api/v1/auth/logout</c>.</summary>
 public sealed record LogoutRequest(string? RefreshToken, bool AllDevices = false);
+
+/// <summary>Request body for <c>POST /api/v1/auth/change-password</c>.</summary>
+public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);

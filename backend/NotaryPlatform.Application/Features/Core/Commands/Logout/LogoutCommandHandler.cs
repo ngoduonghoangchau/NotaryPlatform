@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using NotaryPlatform.Application.Abstractions.Authentication;
 using NotaryPlatform.Application.Abstractions.Caching;
 using NotaryPlatform.Application.Shared.Constants;
+using NotaryPlatform.Application.Shared.Exceptions;
 
 namespace NotaryPlatform.Application.Features.Core.Commands.Logout;
 
@@ -38,9 +39,10 @@ internal sealed class LogoutCommandHandler : IRequestHandler<LogoutCommand>
 
     public async Task Handle(LogoutCommand request, CancellationToken cancellationToken)
     {
-        // AuthorizationBehavior already guaranteed the caller is authenticated.
-        var userId = _currentUser.UserId!.Value;
-        var tenantId = _currentUser.TenantId!.Value;
+        // AuthorizationBehavior guaranteed IsAuthenticated, but a validly-signed token can still lack the
+        // uid/tid claims — treat a missing required claim as unauthenticated (401) instead of crashing (500).
+        var userId = _currentUser.UserId ?? throw new UnauthorizedException();
+        var tenantId = _currentUser.TenantId ?? throw new UnauthorizedException();
 
         var tokenHash = string.IsNullOrEmpty(request.RefreshToken)
             ? null
