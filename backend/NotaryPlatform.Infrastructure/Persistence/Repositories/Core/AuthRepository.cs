@@ -231,4 +231,20 @@ public sealed class AuthRepository : IAuthRepository
         foreach (var token in tokens)
             token.RevokedAt = now;
     }
+
+    public Task<string?> FindPasswordHashAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        return _context.Users
+            .AsNoTracking()
+            .Where(u => u.UserId == userId && u.TenantId == tenantId && u.DeletedAt == null)
+            .Select(u => (string?)u.PasswordHash)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task UpdatePasswordHashAsync(Guid userId, string newPasswordHash, CancellationToken cancellationToken = default)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId, cancellationToken);
+        if (user is not null)
+            user.PasswordHash = newPasswordHash;   // updated_at stamped by the trigger / auditing interceptor
+    }
 }

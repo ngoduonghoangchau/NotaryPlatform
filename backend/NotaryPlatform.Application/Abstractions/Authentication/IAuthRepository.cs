@@ -89,6 +89,20 @@ public interface IAuthRepository
     /// Tracked writes committed by <c>TransactionBehavior</c> (this is a success path — no SaveChanges here).
     /// </summary>
     Task RevokeRefreshTokensAsync(Guid userId, string? tokenHash, bool allDevices, CancellationToken cancellationToken = default);
+
+    // ── UC-AUTH-04 · Change Own Password ─────────────────────────────────────────
+
+    /// <summary>
+    /// Loads the current password hash for a non-deleted user by id + tenant, or null if absent.
+    /// Read value (never a tracked entity); used to verify the current password before a change.
+    /// </summary>
+    Task<string?> FindPasswordHashAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets <c>core.users.password_hash</c>. Tracked update; persisted by <c>TransactionBehavior</c>'s
+    /// commit (no SaveChanges here).
+    /// </summary>
+    Task UpdatePasswordHashAsync(Guid userId, string newPasswordHash, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Minimal credential + status snapshot needed to authenticate a login attempt.</summary>
