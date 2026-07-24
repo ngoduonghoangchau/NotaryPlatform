@@ -3,6 +3,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NotaryPlatform.Application.Features.Core.Commands.ChangePassword;
+using NotaryPlatform.Application.Features.Core.Commands.CompletePasswordReset;
+using NotaryPlatform.Application.Features.Core.Commands.InitiatePasswordReset;
 using NotaryPlatform.Application.Features.Core.Commands.Login;
 using NotaryPlatform.Application.Features.Core.Commands.Logout;
 using NotaryPlatform.Application.Features.Core.Commands.RefreshToken;
@@ -97,6 +99,42 @@ public sealed class AuthController : ControllerBase
 
         return Ok(ApiResponse.Ok("Password changed."));
     }
+
+    /// <summary>
+    /// UC-AUTH-05 Step A — an admin (permission <c>admin.users.manage</c>) initiates a password reset
+    /// for a user in their tenant: emails a single-use, 1-hour reset link. Requires a valid access token.
+    /// </summary>
+    [HttpPost("password-reset/initiate")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> InitiatePasswordReset(
+        [FromBody] InitiatePasswordResetRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _sender.Send(new InitiatePasswordResetCommand(request.UserId), cancellationToken);
+
+        return Ok(ApiResponse.Ok("Password reset link sent."));
+    }
+
+    /// <summary>
+    /// UC-AUTH-05 Step B — the user completes a reset with the emailed token and a new password.
+    /// Anonymous (the token is the credential). On success every session is revoked (BR-AUTH-06).
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("password-reset/complete")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CompletePasswordReset(
+        [FromBody] CompletePasswordResetRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _sender.Send(new CompletePasswordResetCommand(request.Token, request.NewPassword), cancellationToken);
+
+        return Ok(ApiResponse.Ok("Password has been reset."));
+    }
 }
 
 /// <summary>Request body for <c>POST /api/v1/auth/login</c>.</summary>
@@ -110,3 +148,9 @@ public sealed record LogoutRequest(string? RefreshToken, bool AllDevices = false
 
 /// <summary>Request body for <c>POST /api/v1/auth/change-password</c>.</summary>
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
+/// <summary>Request body for <c>POST /api/v1/auth/password-reset/initiate</c>.</summary>
+public sealed record InitiatePasswordResetRequest(Guid UserId);
+
+/// <summary>Request body for <c>POST /api/v1/auth/password-reset/complete</c>.</summary>
+public sealed record CompletePasswordResetRequest(string Token, string NewPassword);

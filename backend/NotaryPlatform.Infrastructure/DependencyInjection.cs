@@ -18,6 +18,7 @@ using NotaryPlatform.Application.Abstractions.BackgroundJobs;
 using NotaryPlatform.Application.Abstractions.Caching;
 using NotaryPlatform.Application.Abstractions.Messaging;
 using NotaryPlatform.Application.Abstractions.Persistence;
+using NotaryPlatform.Application.Shared.Settings;
 // using NotaryPlatform.Application.Features.Core.Auth;
 using NotaryPlatform.Infrastructure.Authorization.Policies;
 using NotaryPlatform.Infrastructure.Caching;
@@ -140,6 +141,7 @@ public static class DependencyInjection
     private static void AddAuthentication(IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
+        services.Configure<AppUrls>(configuration.GetSection(AppUrls.SectionName));
 
         var jwtSection = configuration.GetSection(JwtSettings.SectionName);
         var secretKey = jwtSection["SecretKey"] ?? throw new InvalidOperationException("Jwt:SecretKey is required.");
@@ -179,6 +181,9 @@ public static class DependencyInjection
 
         // IJwtTokenService — Scoped (IOptions is effectively singleton, but scoping keeps DI lifetime consistent).
         services.AddScoped<IJwtTokenService, JwtTokenService>();
+
+        // IResetTokenService — Scoped: generates/hashes single-use password-reset tokens (UC-AUTH-05).
+        services.AddScoped<IResetTokenService, ResetTokenService>();
 
         // IPermissionService — Scoped: wraps scoped NotaryPlatformDbContext.
         services.AddScoped<IPermissionService, PermissionService>();
@@ -250,9 +255,17 @@ public static class DependencyInjection
 
     private static void AddMessaging(IServiceCollection services, IConfiguration configuration)
     {
-        // Email — MailKit SMTP
-        services.Configure<SmtpSettings>(configuration.GetSection(SmtpSettings.SectionName));
-        services.AddScoped<IEmailSender, EmailSender>();
+        // Email — MailKit SMTP, or a no-op sender when email is disabled (zero-budget / local dev).
+        // Set Email__Disabled=true to suppress email (e.g. no SMTP server) without touching callers.
+        if (configuration.GetValue<bool>("Email:Disabled"))
+        {
+            services.AddScoped<IEmailSender, NullEmailSender>();
+        }
+        else
+        {
+            services.Configure<SmtpSettings>(configuration.GetSection(SmtpSettings.SectionName));
+            services.AddScoped<IEmailSender, EmailSender>();
+        }
 
         // SMS — Twilio REST API via HttpClient, or a no-op sender when SMS is disabled.
         // Set Sms__Disabled=true (zero-budget / no provider) to suppress SMS without touching callers.
