@@ -188,6 +188,8 @@ public partial class NotaryPlatformDbContext : DbContext
 
     public virtual DbSet<Organization> Organizations { get; set; }
 
+    public virtual DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+
     public virtual DbSet<Payment> Payments { get; set; }
 
     public virtual DbSet<PaymentAllocation> PaymentAllocations { get; set; }

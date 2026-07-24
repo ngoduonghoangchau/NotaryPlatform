@@ -500,6 +500,40 @@ CREATE TABLE IF NOT EXISTS core.refresh_tokens (
     CONSTRAINT uq_refresh_tokens_token_hash
         UNIQUE (token_hash)
 );
+DROP TABLE core.password_reset_tokens
+CREATE TABLE core.password_reset_tokens (
+    password_reset_token_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    tenant_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    token_hash char(64) NOT NULL,
+    expires_at timestamptz NOT NULL,
+    used_at timestamptz NULL,
+
+    created_by_user_id uuid NULL,
+    created_ip inet NULL,
+
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT uq_password_reset_tokens_token_hash
+        UNIQUE (token_hash),
+
+    CONSTRAINT fk_password_reset_tokens_tenant
+        FOREIGN KEY (tenant_id)
+        REFERENCES core.tenants (tenant_id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT fk_password_reset_tokens_user
+        FOREIGN KEY (user_id)
+        REFERENCES core.users (user_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_password_reset_tokens_created_by_user
+        FOREIGN KEY (created_by_user_id)
+        REFERENCES core.users (user_id)
+        ON DELETE SET NULL
+);
 
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_tenant_id
     ON core.refresh_tokens (tenant_id);
@@ -512,6 +546,15 @@ CREATE INDEX IF NOT EXISTS ix_refresh_tokens_expires_at
 
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_revoked_at
     ON core.refresh_tokens (revoked_at);
+
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_user_id    ON core.password_reset_tokens(user_id);
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_expires_at ON core.password_reset_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_used_at    ON core.password_reset_tokens(used_at);
+
+DROP TRIGGER IF EXISTS trg_password_reset_tokens_updated_at ON core.password_reset_tokens;
+CREATE TRIGGER trg_password_reset_tokens_updated_at
+    BEFORE UPDATE ON core.password_reset_tokens
+    FOR EACH ROW EXECUTE FUNCTION core.set_updated_at();
 
 DROP TRIGGER IF EXISTS trg_refresh_tokens_updated_at ON core.refresh_tokens;
 CREATE TRIGGER trg_refresh_tokens_updated_at
