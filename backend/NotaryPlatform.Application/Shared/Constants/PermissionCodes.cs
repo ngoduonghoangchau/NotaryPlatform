@@ -1,4 +1,4 @@
-namespace NotaryPlatform.Infrastructure.Authorization.PermissionMaps;
+namespace NotaryPlatform.Application.Shared.Constants;
 
 /// <summary>
 /// Source-of-truth catalog of every permission code recognised by the system.

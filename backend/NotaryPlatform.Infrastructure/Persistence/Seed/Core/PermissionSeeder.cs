@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
+using NotaryPlatform.Application.Shared.Constants;
 using NotaryPlatform.Infrastructure.Authorization.PermissionMaps;
 using NotaryPlatform.Infrastructure.Persistence.Seed.Abstractions;
 using NotaryPlatform.Infrastructure.Persistence.Seed.Builders.Core;

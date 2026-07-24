@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
+using NotaryPlatform.Application.Shared.Constants;
 using NotaryPlatform.Infrastructure.Authorization.Evaluators;
 using NotaryPlatform.Infrastructure.Authorization.Handlers;
 using NotaryPlatform.Infrastructure.Authorization.PermissionMaps;
