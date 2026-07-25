@@ -61,7 +61,11 @@ public sealed class GlobalExceptionMiddleware
 
             case UnauthorizedException e:
                 statusCode = StatusCodes.Status401Unauthorized;
-                response = ApiResponse<object>.Unauthorized(e.Message, meta);
+                response = ApiResponse<object>.Fail(
+                    StatusCodes.Status401Unauthorized,
+                    e.Message,
+                    ErrorDetail.From(e.ErrorCode ?? ErrorCodes.Unauthorized, e.Message),
+                    meta);
                 break;
 
             case AccountLockedException e:

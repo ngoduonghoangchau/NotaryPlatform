@@ -9,6 +9,7 @@ using NotaryPlatform.Application.Features.Core.Commands.InitiatePasswordReset;
 using NotaryPlatform.Application.Features.Core.Commands.Login;
 using NotaryPlatform.Application.Features.Core.Commands.Logout;
 using NotaryPlatform.Application.Features.Core.Commands.RefreshToken;
+using NotaryPlatform.Application.Features.Core.Commands.VerifyLoginMfa;
 using NotaryPlatform.Application.Features.Core.Commands.VerifyMfaTotp;
 using NotaryPlatform.Application.Features.Core.DTOs;
 using NotaryPlatform.Application.Shared.Models.Responses;
@@ -28,7 +29,9 @@ public sealed class AuthController : ControllerBase
     public AuthController(ISender sender) => _sender = sender;
 
     /// <summary>
-    /// UC-AUTH-01 — authenticate with email + password and receive access + refresh tokens.
+    /// UC-AUTH-01 / UC-AUTH-07 — authenticate with email + password. A user without MFA receives access +
+    /// refresh tokens (<c>status = authenticated</c>); a user with MFA enabled receives a short-lived
+    /// challenge instead (<c>status = mfa_required</c>) and must complete <c>POST /auth/login/mfa</c>.
     /// </summary>
     [AllowAnonymous]
     [HttpPost("login")]
@@ -44,6 +47,30 @@ public sealed class AuthController : ControllerBase
         var result = await _sender.Send(
             new LoginCommand(request.TenantCode, request.Email, request.Password, request.DeviceName),
             cancellationToken);
+
+        var message = result.Status == LoginResponse.StatusMfaRequired
+            ? "Multi-factor authentication required."
+            : "Login successful.";
+
+        return Ok(ApiResponse<LoginResponse>.Ok(result, message));
+    }
+
+    /// <summary>
+    /// UC-AUTH-07 — complete an MFA login: submit the <c>mfaToken</c> from the login challenge plus a
+    /// 6-digit TOTP code or a recovery code, and receive access + refresh tokens. Anonymous (the challenge
+    /// token is the presented credential).
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("login/mfa")]
+    [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status423Locked)]
+    public async Task<IActionResult> VerifyLoginMfa(
+        [FromBody] VerifyLoginMfaRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new VerifyLoginMfaCommand(request.MfaToken, request.Code), cancellationToken);
 
         return Ok(ApiResponse<LoginResponse>.Ok(result, "Login successful."));
     }
@@ -201,3 +228,6 @@ public sealed record EnrollMfaRequest(string? Label);
 
 /// <summary>Request body for <c>POST /api/v1/auth/mfa/totp/verify</c>.</summary>
 public sealed record VerifyMfaRequest(Guid MfaDeviceId, string Code);
+
+/// <summary>Request body for <c>POST /api/v1/auth/login/mfa</c> (UC-AUTH-07).</summary>
+public sealed record VerifyLoginMfaRequest(string MfaToken, string Code);
