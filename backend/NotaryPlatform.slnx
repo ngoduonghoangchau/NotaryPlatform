@@ -4,4 +4,5 @@
   <Project Path="NotaryPlatform.Application.Tests/NotaryPlatform.Application.Tests.csproj" />
   <Project Path="NotaryPlatform.Domain/NotaryPlatform.Domain.csproj" />
   <Project Path="NotaryPlatform.Infrastructure/NotaryPlatform.Infrastructure.csproj" />
+  <Project Path="NotaryPlatform.Infrastructure.Tests/NotaryPlatform.Infrastructure.Tests.csproj" />
 </Solution>

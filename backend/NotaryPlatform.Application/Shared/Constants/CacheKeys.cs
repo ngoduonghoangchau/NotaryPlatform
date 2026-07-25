@@ -44,4 +44,7 @@ public static class CacheKeys
     // ── Auth ──────────────────────────────────────────────────────────────
     /// <summary>Failed-login counter + lockout window for BR-AUTH-02 (email is lower-cased).</summary>
     public static string LoginAttempts(Guid tenantId, string email) => $"Auth:LoginAttempts:{tenantId}:{email}";
+
+    /// <summary>Failed MFA-verification counter + lockout window for UC-AUTH-06 (per user).</summary>
+    public static string MfaVerifyAttempts(Guid userId) => $"Auth:MfaVerifyAttempts:{userId}";
 }

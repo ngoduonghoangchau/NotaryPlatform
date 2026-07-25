@@ -29,6 +29,7 @@ using NotaryPlatform.Infrastructure.Persistence;
 using NotaryPlatform.Infrastructure.Persistence.DbContexts;
 using NotaryPlatform.Infrastructure.Persistence.Interceptors;
 using NotaryPlatform.Infrastructure.Persistence.Repositories.Core;
+using NotaryPlatform.Infrastructure.Persistence.Repositories.Security;
 using NotaryPlatform.Infrastructure.Persistence.Seed.Orchestration;
 using NotaryPlatform.Infrastructure.Services.Authentication;
 using NotaryPlatform.Infrastructure.Services.External.Firestore;
@@ -196,6 +197,28 @@ public static class DependencyInjection
 
         // ILoginAttemptTracker — Scoped: Redis-backed failed-login lockout counter (BR-AUTH-02).
         services.AddScoped<ILoginAttemptTracker, LoginAttemptTracker>();
+
+        // ── MFA (UC-AUTH-06) ──────────────────────────────────────────────
+        // Data Protection encrypts the TOTP secret at rest (D-1). The web host also registers this, but
+        // adding it here (TryAdd-based) keeps the vault self-contained and testable outside the web host.
+        // NOTE (ops): persist the key ring to a shared, durable store in production — see
+        // DataProtectionMfaSecretVault. Otherwise a key rotation/loss makes stored secrets undecryptable.
+        services.AddDataProtection();
+
+        // ITotpService — Scoped: RFC 6238 TOTP via Otp.NET (D-2).
+        services.AddScoped<ITotpService, TotpService>();
+
+        // IMfaSecretVault — Scoped: encrypts the TOTP secret so secret_reference never holds plaintext (D-1).
+        services.AddScoped<IMfaSecretVault, DataProtectionMfaSecretVault>();
+
+        // IRecoveryCodeService — Scoped: generates + SHA-256-hashes single-use recovery codes (D-3).
+        services.AddScoped<IRecoveryCodeService, RecoveryCodeService>();
+
+        // IMfaVerifyAttemptTracker — Scoped: Redis-backed per-user MFA-verify lockout (brute-force guard).
+        services.AddScoped<IMfaVerifyAttemptTracker, MfaVerifyAttemptTracker>();
+
+        // IMfaRepository — Scoped: wraps the scoped DbContext (security.mfa_devices, D-4).
+        services.AddScoped<IMfaRepository, MfaRepository>();
     }
 
     // ── File Storage ──────────────────────────────────────────────────────────────
