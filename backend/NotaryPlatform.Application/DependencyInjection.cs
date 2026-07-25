@@ -1,6 +1,7 @@
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using NotaryPlatform.Application.Features.Core.Services;
 using NotaryPlatform.Application.Shared.Behaviors;
 
 namespace NotaryPlatform.Application;
@@ -30,6 +31,10 @@ public static class DependencyInjection
 
         // ── AutoMapper ─────────────────────────────────────────────────────
         services.AddAutoMapper(_ => { }, assembly);
+
+        // ── Auth-slice services ────────────────────────────────────────────
+        // Shared session issuance for UC-AUTH-01 (login) and UC-AUTH-07 (post-MFA login).
+        services.AddScoped<IAuthSessionIssuer, AuthSessionIssuer>();
 
         return services;
     }

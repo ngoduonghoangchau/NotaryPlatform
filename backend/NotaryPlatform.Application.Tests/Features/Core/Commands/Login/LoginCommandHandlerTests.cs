@@ -1,41 +1,48 @@
 using FluentAssertions;
 using NSubstitute;
 using NotaryPlatform.Application.Abstractions.Authentication;
-using NotaryPlatform.Application.Abstractions.Authorization;
 using NotaryPlatform.Application.Abstractions.System;
 using NotaryPlatform.Application.Features.Core.Commands.Login;
 using NotaryPlatform.Application.Features.Core.DTOs;
+using NotaryPlatform.Application.Features.Core.Services;
 using NotaryPlatform.Application.Shared.Exceptions;
-using NotaryPlatform.Application.Shared.Models.Auth;
 using NotaryPlatform.Domain.Features.Core.Enums;
 using Xunit;
 
 namespace NotaryPlatform.Application.Tests.Features.Core.Commands.Login;
 
-/// <summary>Unit tests for UC-AUTH-01's <see cref="LoginCommandHandler"/> — every branch of §6 of the plan.</summary>
+/// <summary>
+/// Unit tests for <see cref="LoginCommandHandler"/> — UC-AUTH-01 branches plus the UC-AUTH-07 MFA branch
+/// (TC-A-01…07). Token issuance is delegated to <see cref="IAuthSessionIssuer"/> (tested separately), so
+/// these assert the handler's decisions, not the issuance internals.
+/// </summary>
 public sealed class LoginCommandHandlerTests
 {
     private readonly IAuthRepository _auth = Substitute.For<IAuthRepository>();
     private readonly ILoginAttemptTracker _lockout = Substitute.For<ILoginAttemptTracker>();
     private readonly IPasswordHasher _passwordHasher = Substitute.For<IPasswordHasher>();
-    private readonly IPermissionService _permissions = Substitute.For<IPermissionService>();
-    private readonly IJwtTokenService _jwt = Substitute.For<IJwtTokenService>();
-    private readonly ICurrentUser _currentUser = Substitute.For<ICurrentUser>();
+    private readonly IMfaRepository _mfa = Substitute.For<IMfaRepository>();
+    private readonly IMfaChallengeStore _challengeStore = Substitute.For<IMfaChallengeStore>();
+    private readonly IAuthSessionIssuer _sessionIssuer = Substitute.For<IAuthSessionIssuer>();
     private readonly IDateTime _clock = Substitute.For<IDateTime>();
 
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly Guid UserId = Guid.NewGuid();
-    private static readonly DateTimeOffset Now = new(2026, 7, 3, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Now = new(2026, 7, 25, 12, 0, 0, TimeSpan.Zero);
 
     private const string TenantCode = "acme";
     private const string Email = "user@acme.com";
     private const string Password = "correct-horse-battery-staple";
     private const string PasswordHash = "$2a$stored-hash";
 
+    private static readonly AuthSession Session = new(
+        "access-token", Now.AddMinutes(60), "RAW-REFRESH", Now.AddDays(30),
+        new AuthUserSummary(UserId, TenantId, null, Email, "Test User", new List<string> { "notary" }));
+
     public LoginCommandHandlerTests() => _clock.UtcNow.Returns(Now);
 
     private LoginCommandHandler CreateHandler() =>
-        new(_auth, _lockout, _passwordHasher, _permissions, _jwt, _currentUser, _clock);
+        new(_auth, _lockout, _passwordHasher, _mfa, _challengeStore, _sessionIssuer, _clock);
 
     private static LoginCommand Command(string? device = "web") =>
         new(TenantCode, Email, Password, device);
@@ -49,45 +56,48 @@ public sealed class LoginCommandHandlerTests
         _lockout.GetLockoutExpiryAsync(TenantId, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((DateTimeOffset?)null);
         _auth.FindLoginUserAsync(TenantId, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(ActiveUser(status));
         _passwordHasher.Verify(Password, PasswordHash).Returns(true);
+        _mfa.HasActiveMfaAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(false);
         _auth.RequiresMfaSetupAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(false);
-        _permissions.GetRolesAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(new List<string> { "notary" });
-        _permissions.GetPermissionsAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(new List<string> { "journal.entries.read" });
-        _jwt.CreateAccessToken(Arg.Any<JwtTokenClaims>()).Returns(new AccessTokenResult("access-token", Now.AddMinutes(60)));
-        _jwt.CreateRefreshToken().Returns("RAW-REFRESH");
-        _jwt.HashRefreshToken("RAW-REFRESH").Returns("HASHED-REFRESH");
+        _sessionIssuer.IssueAsync(Arg.Any<SessionSubject>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(Session);
+        _challengeStore.IssueAsync(Arg.Any<MfaChallengeContext>(), Arg.Any<CancellationToken>())
+            .Returns(new MfaChallengeIssued("MFA-CHALLENGE-TOKEN", Now.AddMinutes(5)));
     }
 
-    [Fact]
-    public async Task Valid_credentials_issue_tokens_persist_hash_stamp_login_and_reset_lockout()
+    [Fact] // TC-A-05 — no MFA ⇒ authenticated session (unchanged UC-AUTH-01 behaviour)
+    public async Task Valid_credentials_without_mfa_issue_a_session_and_reset_lockout()
     {
         ArrangeHappyPath();
 
         var result = await CreateHandler().Handle(Command(), CancellationToken.None);
 
-        result.AccessToken.Should().Be("access-token");
-        result.RefreshToken.Should().Be("RAW-REFRESH");          // raw token returned to client
-        result.User.UserId.Should().Be(UserId);
-        result.User.Roles.Should().Contain("notary");
-
-        await _auth.Received(1).AddRefreshTokenAsync(
-            Arg.Is<RefreshTokenCreate>(t => t.TokenHash == "HASHED-REFRESH" && t.TokenHash != "RAW-REFRESH"),
-            Arg.Any<CancellationToken>());
-        await _auth.Received(1).StampLastLoginAsync(UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        result.Status.Should().Be(LoginResponse.StatusAuthenticated);
+        result.Session.Should().Be(Session);
+        result.MfaChallenge.Should().BeNull();
+        await _sessionIssuer.Received(1).IssueAsync(
+            Arg.Is<SessionSubject>(s => s.UserId == UserId && s.TenantId == TenantId), "web", Arg.Any<CancellationToken>());
         await _lockout.Received(1).ResetAsync(TenantId, Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _challengeStore.DidNotReceive().IssueAsync(Arg.Any<MfaChallengeContext>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact] // BR-AUTH-07
-    public async Task Revokes_prior_device_token_before_adding_the_new_one()
+    [Fact] // TC-A-01/02/03 — MFA user ⇒ mfa_required challenge, NO session, NO challenge-side writes
+    public async Task Mfa_enabled_user_gets_a_challenge_and_no_session()
     {
         ArrangeHappyPath();
+        _mfa.HasActiveMfaAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(true);
 
-        await CreateHandler().Handle(Command("web"), CancellationToken.None);
+        var result = await CreateHandler().Handle(Command(), CancellationToken.None);
 
-        Received.InOrder(() =>
-        {
-            _auth.RevokeActiveRefreshTokensForDeviceAsync(UserId, "web", Arg.Any<CancellationToken>());
-            _auth.AddRefreshTokenAsync(Arg.Any<RefreshTokenCreate>(), Arg.Any<CancellationToken>());
-        });
+        result.Status.Should().Be(LoginResponse.StatusMfaRequired);
+        result.Session.Should().BeNull();
+        result.MfaChallenge!.MfaToken.Should().Be("MFA-CHALLENGE-TOKEN");
+        result.MfaChallenge.Methods.Should().Contain("totp");
+
+        await _challengeStore.Received(1).IssueAsync(
+            Arg.Is<MfaChallengeContext>(c => c.UserId == UserId && c.TenantId == TenantId && c.DeviceName == "web"),
+            Arg.Any<CancellationToken>());
+        await _sessionIssuer.DidNotReceive().IssueAsync(Arg.Any<SessionSubject>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        // The MFA branch short-circuits the BR-AUTH-05 setup gate.
+        await _auth.DidNotReceive().RequiresMfaSetupAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -114,8 +124,8 @@ public sealed class LoginCommandHandlerTests
         await _lockout.Received(1).RegisterFailureAsync(TenantId, Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Wrong_password_throws_unauthorized_registers_failure_and_issues_no_token()
+    [Fact] // TC-A-07 — wrong password fails before the MFA decision
+    public async Task Wrong_password_throws_unauthorized_registers_failure_and_issues_nothing()
     {
         ArrangeHappyPath();
         _passwordHasher.Verify(Password, PasswordHash).Returns(false);
@@ -124,7 +134,9 @@ public sealed class LoginCommandHandlerTests
 
         await act.Should().ThrowAsync<UnauthorizedException>();
         await _lockout.Received(1).RegisterFailureAsync(TenantId, Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _auth.DidNotReceive().AddRefreshTokenAsync(Arg.Any<RefreshTokenCreate>(), Arg.Any<CancellationToken>());
+        await _mfa.DidNotReceive().HasActiveMfaAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _sessionIssuer.DidNotReceive().IssueAsync(Arg.Any<SessionSubject>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await _challengeStore.DidNotReceive().IssueAsync(Arg.Any<MfaChallengeContext>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -150,16 +162,18 @@ public sealed class LoginCommandHandlerTests
         _passwordHasher.DidNotReceive().Verify(Arg.Any<string>(), Arg.Any<string>());
     }
 
-    [Fact] // BR-AUTH-05 (D2 gate)
-    public async Task Privileged_role_without_mfa_throws_forbidden_and_issues_no_token()
+    [Fact] // TC-A-06 / BR-AUTH-05 — privileged user with NO device must enrol first
+    public async Task Privileged_role_without_mfa_device_throws_forbidden_and_issues_nothing()
     {
         ArrangeHappyPath();
+        _mfa.HasActiveMfaAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(false);
         _auth.RequiresMfaSetupAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(true);
 
         var act = async () => await CreateHandler().Handle(Command(), CancellationToken.None);
 
         await act.Should().ThrowAsync<ForbiddenException>();
-        await _auth.DidNotReceive().AddRefreshTokenAsync(Arg.Any<RefreshTokenCreate>(), Arg.Any<CancellationToken>());
+        await _sessionIssuer.DidNotReceive().IssueAsync(Arg.Any<SessionSubject>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await _challengeStore.DidNotReceive().IssueAsync(Arg.Any<MfaChallengeContext>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

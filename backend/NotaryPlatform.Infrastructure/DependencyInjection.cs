@@ -219,6 +219,10 @@ public static class DependencyInjection
 
         // IMfaRepository — Scoped: wraps the scoped DbContext (security.mfa_devices, D-4).
         services.AddScoped<IMfaRepository, MfaRepository>();
+
+        // ── MFA verification at login (UC-AUTH-07) ────────────────────────
+        // IMfaChallengeStore — Scoped: Redis-backed, short-lived, single-use login MFA challenge (D-1).
+        services.AddScoped<IMfaChallengeStore, RedisMfaChallengeStore>();
     }
 
     // ── File Storage ──────────────────────────────────────────────────────────────
