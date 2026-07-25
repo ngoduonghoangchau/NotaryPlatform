@@ -36,6 +36,7 @@ public static class AppDefaults
         public static readonly TimeSpan JwtExpiry = TimeSpan.FromMinutes(60);
         public static readonly TimeSpan RefreshTokenExpiry = TimeSpan.FromDays(30);
         public static readonly TimeSpan PresignedUrlExpiry = TimeSpan.FromMinutes(15);
+        public static readonly TimeSpan PasswordResetTokenExpiry = TimeSpan.FromHours(1);   // BR-AUTH-09
     }
 
     public static class Files

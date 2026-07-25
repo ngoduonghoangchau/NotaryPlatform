@@ -103,6 +103,29 @@ public interface IAuthRepository
     /// commit (no SaveChanges here).
     /// </summary>
     Task UpdatePasswordHashAsync(Guid userId, string newPasswordHash, CancellationToken cancellationToken = default);
+
+    // ── UC-AUTH-05 · Reset Password (Admin-initiated) ────────────────────────────
+
+    /// <summary>
+    /// Marks every prior UNUSED reset token for the user as used — enforces one active reset token at a
+    /// time, so a newly-issued link invalidates any older one. Tracked; committed on transaction commit.
+    /// </summary>
+    Task InvalidatePasswordResetTokensForUserAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Adds a reset-token row (storing the SHA-256 <c>TokenHash</c>, never the raw token). Tracked;
+    /// persisted by <c>TransactionBehavior</c>'s commit (no SaveChanges here).
+    /// </summary>
+    Task AddPasswordResetTokenAsync(PasswordResetTokenCreate token, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Loads a reset token by its SHA-256 hash, or null. The caller enforces BR-AUTH-09
+    /// (unused + unexpired) from <see cref="PasswordResetTokenRecord.UsedAtUtc"/> / <c>ExpiresAtUtc</c>.
+    /// </summary>
+    Task<PasswordResetTokenRecord?> FindPasswordResetTokenByHashAsync(string tokenHash, CancellationToken cancellationToken = default);
+
+    /// <summary>Marks a reset token used (<c>used_at = now</c>) — single-use (BR-AUTH-09). Tracked.</summary>
+    Task MarkPasswordResetTokenUsedAsync(Guid passwordResetTokenId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Minimal credential + status snapshot needed to authenticate a login attempt.</summary>
@@ -142,3 +165,20 @@ public sealed record ActiveUserRecord(
     string Email,
     string DisplayName,
     UserStatus Status);
+
+/// <summary>Values required to persist a new password-reset token (the hash, never the raw token) — UC-AUTH-05.</summary>
+public sealed record PasswordResetTokenCreate(
+    Guid TenantId,
+    Guid UserId,
+    string TokenHash,
+    DateTime ExpiresAtUtc,
+    Guid? CreatedByUserId,
+    IPAddress? CreatedIp);
+
+/// <summary>Reset-token snapshot keyed by its SHA-256 hash — UC-AUTH-05.</summary>
+public sealed record PasswordResetTokenRecord(
+    Guid PasswordResetTokenId,
+    Guid TenantId,
+    Guid UserId,
+    DateTime ExpiresAtUtc,
+    DateTime? UsedAtUtc);

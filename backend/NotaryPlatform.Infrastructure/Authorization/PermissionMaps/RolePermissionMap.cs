@@ -1,4 +1,4 @@
-using static NotaryPlatform.Infrastructure.Authorization.PermissionMaps.PermissionCodes;
+using static NotaryPlatform.Application.Shared.Constants.PermissionCodes;
 
 namespace NotaryPlatform.Infrastructure.Authorization.PermissionMaps;
 

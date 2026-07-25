@@ -61,4 +61,5 @@ public static class ErrorCodes
     public const string ServiceUnavailable = "SERVICE_UNAVAILABLE";
     public const string Gone = "RESOURCE_GONE";
     public const string AccountLocked = "ACCOUNT_LOCKED";
+    public const string ResetTokenInvalid = "RESET_TOKEN_INVALID";
 }

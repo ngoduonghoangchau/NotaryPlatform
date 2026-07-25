@@ -102,30 +102,23 @@ public sealed class AuthRepository : IAuthRepository
 
         var now = DateTime.UtcNow;
         foreach (var token in activeTokens)
-            token.RevokedAt = now;
+            token.Revoke(now);
     }
 
     public async Task AddRefreshTokenAsync(RefreshTokenCreate token, CancellationToken cancellationToken = default)
     {
         // CreatedAt / UpdatedAt are stamped by AuditingSaveChangesInterceptor on commit.
-        await _context.RefreshTokens.AddAsync(new RefreshToken
-        {
-            RefreshTokenId = Guid.NewGuid(),
-            TenantId = token.TenantId,
-            UserId = token.UserId,
-            TokenHash = token.TokenHash,
-            DeviceName = token.DeviceName,
-            UserAgent = token.UserAgent,
-            CreatedIp = token.CreatedIp,
-            ExpiresAt = token.ExpiresAtUtc,
-        }, cancellationToken);
+        await _context.RefreshTokens.AddAsync(
+            RefreshToken.Issue(
+                token.TenantId, token.UserId, token.TokenHash,
+                token.DeviceName, token.UserAgent, token.CreatedIp, token.ExpiresAtUtc),
+            cancellationToken);
     }
 
     public async Task StampLastLoginAsync(Guid userId, DateTime whenUtc, CancellationToken cancellationToken = default)
     {
         var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId, cancellationToken);
-        if (user is not null)
-            user.LastLoginAt = whenUtc;
+        user?.StampLastLogin(whenUtc);
     }
 
     public async Task<RefreshTokenRecord?> FindRefreshTokenByHashAsync(string tokenHash, CancellationToken cancellationToken = default)
@@ -164,28 +157,14 @@ public sealed class AuthRepository : IAuthRepository
     {
         // Insert the new row first so the old one can point at it (the rotation chain). CreatedAt /
         // UpdatedAt are stamped by AuditingSaveChangesInterceptor on commit.
-        var newTokenId = Guid.NewGuid();
-        await _context.RefreshTokens.AddAsync(new RefreshToken
-        {
-            RefreshTokenId = newTokenId,
-            TenantId = newToken.TenantId,
-            UserId = newToken.UserId,
-            TokenHash = newToken.TokenHash,
-            DeviceName = newToken.DeviceName,
-            UserAgent = newToken.UserAgent,
-            CreatedIp = newToken.CreatedIp,
-            ExpiresAt = newToken.ExpiresAtUtc,
-        }, cancellationToken);
+        var replacement = RefreshToken.Issue(
+            newToken.TenantId, newToken.UserId, newToken.TokenHash,
+            newToken.DeviceName, newToken.UserAgent, newToken.CreatedIp, newToken.ExpiresAtUtc);
+        await _context.RefreshTokens.AddAsync(replacement, cancellationToken);
 
         var old = await _context.RefreshTokens
             .FirstOrDefaultAsync(rt => rt.RefreshTokenId == oldTokenId, cancellationToken);
-        if (old is not null)
-        {
-            var now = DateTime.UtcNow;
-            old.RevokedAt = now;
-            old.LastUsedAt = now;
-            old.ReplacedByTokenId = newTokenId;
-        }
+        old?.RotateOut(DateTime.UtcNow, replacement.RefreshTokenId);
         // Tracked writes — persisted by TransactionBehavior's commit.
     }
 
@@ -206,7 +185,7 @@ public sealed class AuthRepository : IAuthRepository
 
         var now = DateTime.UtcNow;
         foreach (var token in activeTokens)
-            token.RevokedAt = now;
+            token.Revoke(now);
 
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -229,7 +208,7 @@ public sealed class AuthRepository : IAuthRepository
 
         var now = DateTime.UtcNow;
         foreach (var token in tokens)
-            token.RevokedAt = now;
+            token.Revoke(now);
     }
 
     public Task<string?> FindPasswordHashAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
@@ -244,7 +223,48 @@ public sealed class AuthRepository : IAuthRepository
     public async Task UpdatePasswordHashAsync(Guid userId, string newPasswordHash, CancellationToken cancellationToken = default)
     {
         var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId, cancellationToken);
-        if (user is not null)
-            user.PasswordHash = newPasswordHash;   // updated_at stamped by the trigger / auditing interceptor
+        user?.SetPasswordHash(newPasswordHash);   // updated_at stamped by the trigger / auditing interceptor
+    }
+
+    public async Task InvalidatePasswordResetTokensForUserAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var tokens = await _context.PasswordResetTokens
+            .Where(t => t.UserId == userId && t.UsedAt == null)
+            .ToListAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+        foreach (var token in tokens)
+            token.MarkUsed(now);
+    }
+
+    public async Task AddPasswordResetTokenAsync(PasswordResetTokenCreate token, CancellationToken cancellationToken = default)
+    {
+        // CreatedAt / UpdatedAt are stamped by AuditingSaveChangesInterceptor on commit.
+        await _context.PasswordResetTokens.AddAsync(
+            PasswordResetToken.Issue(
+                token.TenantId, token.UserId, token.TokenHash,
+                token.ExpiresAtUtc, token.CreatedByUserId, token.CreatedIp),
+            cancellationToken);
+    }
+
+    public Task<PasswordResetTokenRecord?> FindPasswordResetTokenByHashAsync(string tokenHash, CancellationToken cancellationToken = default)
+    {
+        return _context.PasswordResetTokens
+            .AsNoTracking()
+            .Where(t => t.TokenHash == tokenHash)
+            .Select(t => new PasswordResetTokenRecord(
+                t.PasswordResetTokenId,
+                t.TenantId,
+                t.UserId,
+                t.ExpiresAt,
+                t.UsedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task MarkPasswordResetTokenUsedAsync(Guid passwordResetTokenId, CancellationToken cancellationToken = default)
+    {
+        var token = await _context.PasswordResetTokens
+            .FirstOrDefaultAsync(t => t.PasswordResetTokenId == passwordResetTokenId, cancellationToken);
+        token?.MarkUsed(DateTime.UtcNow);
     }
 }

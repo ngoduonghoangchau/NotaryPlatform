@@ -1,5 +1,6 @@
 using FluentValidation;
 using NotaryPlatform.Application.Features.Core.Commands.ChangePassword;
+using NotaryPlatform.Application.Shared.Validation;
 
 namespace NotaryPlatform.Application.Features.Core.Validators;
 
@@ -17,12 +18,7 @@ public sealed class ChangePasswordCommandValidator : AbstractValidator<ChangePas
             .NotEmpty().WithMessage("Current password is required.");
 
         RuleFor(x => x.NewPassword)
-            .NotEmpty().WithMessage("New password is required.")
-            .MinimumLength(12).WithMessage("Password must be at least 12 characters.")
-            .Matches("[A-Z]").WithMessage("Password must contain an uppercase letter.")
-            .Matches("[a-z]").WithMessage("Password must contain a lowercase letter.")
-            .Matches("[0-9]").WithMessage("Password must contain a digit.")
-            .Matches("[^A-Za-z0-9]").WithMessage("Password must contain a special character.")
+            .Password()   // BR-AUTH-01 (shared with UC-AUTH-05)
             .NotEqual(x => x.CurrentPassword).WithMessage("New password must differ from the current password.");
     }
 }
