@@ -77,4 +77,13 @@ public partial class MfaDevice
         IsPrimary = false;
         status = DeviceStatus.Expired;
     }
+
+    /// <summary>Records that the device was just used to pass an MFA challenge (audit — UC-AUTH-07).</summary>
+    public void StampUsed(DateTime whenUtc) => LastUsedAt = whenUtc;
+
+    /// <summary>
+    /// Replaces the device's <c>metadata</c> jsonb — used to stamp a recovery code's <c>usedAt</c> after
+    /// the repository re-serializes the set it owns (UC-AUTH-07). The repo owns this blob's shape (D-3).
+    /// </summary>
+    public void UpdateMetadata(string metadataJson) => Metadata = metadataJson;
 }

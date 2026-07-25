@@ -117,6 +117,70 @@ public sealed class MfaRepository : IMfaRepository
         await _context.MfaDevices.AddAsync(row, cancellationToken);
     }
 
+    // ── UC-AUTH-07 · MFA verification at login ───────────────────────────────
+
+    public Task<bool> HasActiveMfaAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        return _context.MfaDevices
+            .AsNoTracking()
+            .AnyAsync(m => m.UserId == userId
+                           && m.TenantId == tenantId
+                           && m.method_type == MfaMethodType.Totp
+                           && m.IsVerified
+                           && m.RevokedAt == null
+                           && m.DeletedAt == null,
+                cancellationToken);
+    }
+
+    public Task<TotpChallengeRecord?> FindActiveTotpAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        return _context.MfaDevices
+            .AsNoTracking()
+            .Where(m => m.UserId == userId
+                        && m.TenantId == tenantId
+                        && m.method_type == MfaMethodType.Totp
+                        && m.IsVerified
+                        && m.RevokedAt == null
+                        && m.DeletedAt == null)
+            .OrderByDescending(m => m.IsPrimary)   // the one primary device first
+            .Select(m => new TotpChallengeRecord(m.MfaDeviceId, m.SecretReference))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<bool> TryConsumeRecoveryCodeAsync(Guid userId, Guid tenantId, string codeHash, DateTime whenUtc, CancellationToken cancellationToken = default)
+    {
+        // Tracked read — the row is mutated (usedAt) and flushed by TransactionBehavior's commit.
+        var row = await _context.MfaDevices
+            .FirstOrDefaultAsync(m => m.UserId == userId
+                                      && m.TenantId == tenantId
+                                      && m.method_type == MfaMethodType.RecoveryCode
+                                      && m.RevokedAt == null
+                                      && m.DeletedAt == null,
+                cancellationToken);
+        if (row is null)
+            return false;
+
+        var metadata = JsonSerializer.Deserialize<RecoveryCodesMetadata>(row.Metadata, MetadataJson);
+        if (metadata?.RecoveryCodes is null)
+            return false;
+
+        // Match an UNUSED entry by its stored hash (single-use).
+        var index = Array.FindIndex(metadata.RecoveryCodes, e => e.Hash == codeHash && e.UsedAt is null);
+        if (index < 0)
+            return false;
+
+        metadata.RecoveryCodes[index] = metadata.RecoveryCodes[index] with { UsedAt = whenUtc };
+        row.UpdateMetadata(JsonSerializer.Serialize(metadata, MetadataJson));
+        return true;
+    }
+
+    public async Task StampDeviceUsedAsync(Guid mfaDeviceId, DateTime whenUtc, CancellationToken cancellationToken = default)
+    {
+        var device = await _context.MfaDevices
+            .FirstOrDefaultAsync(m => m.MfaDeviceId == mfaDeviceId, cancellationToken);
+        device?.StampUsed(whenUtc);
+    }
+
     // Shape of the recovery_code row's metadata jsonb (D-3): { "recoveryCodes": [ { "hash": "...", "usedAt": null }, ... ] }
     private sealed record RecoveryCodesMetadata(RecoveryCodeEntry[] RecoveryCodes);
 
