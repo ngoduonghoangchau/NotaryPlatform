@@ -62,4 +62,5 @@ public static class ErrorCodes
     public const string Gone = "RESOURCE_GONE";
     public const string AccountLocked = "ACCOUNT_LOCKED";
     public const string ResetTokenInvalid = "RESET_TOKEN_INVALID";
+    public const string MfaCodeInvalid = "MFA_CODE_INVALID";
 }

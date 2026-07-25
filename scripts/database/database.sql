@@ -500,7 +500,7 @@ CREATE TABLE IF NOT EXISTS core.refresh_tokens (
     CONSTRAINT uq_refresh_tokens_token_hash
         UNIQUE (token_hash)
 );
-DROP TABLE core.password_reset_tokens
+DROP TABLE IF EXISTS core.password_reset_tokens;
 CREATE TABLE core.password_reset_tokens (
     password_reset_token_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 

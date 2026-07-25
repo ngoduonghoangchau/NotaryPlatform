@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NotaryPlatform.Application.Features.Core.Commands.ChangePassword;
 using NotaryPlatform.Application.Features.Core.Commands.CompletePasswordReset;
+using NotaryPlatform.Application.Features.Core.Commands.EnrollMfaTotp;
 using NotaryPlatform.Application.Features.Core.Commands.InitiatePasswordReset;
 using NotaryPlatform.Application.Features.Core.Commands.Login;
 using NotaryPlatform.Application.Features.Core.Commands.Logout;
 using NotaryPlatform.Application.Features.Core.Commands.RefreshToken;
+using NotaryPlatform.Application.Features.Core.Commands.VerifyMfaTotp;
 using NotaryPlatform.Application.Features.Core.DTOs;
 using NotaryPlatform.Application.Shared.Models.Responses;
 
@@ -135,6 +137,45 @@ public sealed class AuthController : ControllerBase
 
         return Ok(ApiResponse.Ok("Password has been reset."));
     }
+
+    /// <summary>
+    /// UC-AUTH-06 Step A — a signed-in user begins TOTP MFA enrollment. Returns the raw secret and an
+    /// <c>otpauth://</c> URI once (for the QR); the device stays pending until <c>verify</c> proves a code.
+    /// Requires a valid access token.
+    /// </summary>
+    [HttpPost("mfa/totp/enroll")]
+    [ProducesResponseType(typeof(ApiResponse<MfaEnrollmentResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> EnrollMfaTotp(
+        [FromBody] EnrollMfaRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new EnrollMfaTotpCommand(request.Label), cancellationToken);
+
+        return Ok(ApiResponse<MfaEnrollmentResponse>.Ok(result, "Scan the secret, then verify a code to finish."));
+    }
+
+    /// <summary>
+    /// UC-AUTH-06 Step B — activate a pending TOTP device with a 6-digit code. On success the device
+    /// becomes primary, any prior verified TOTP is revoked, and single-use recovery codes are returned
+    /// once. Requires a valid access token.
+    /// </summary>
+    [HttpPost("mfa/totp/verify")]
+    [ProducesResponseType(typeof(ApiResponse<MfaRecoveryCodesResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status423Locked)]
+    public async Task<IActionResult> VerifyMfaTotp(
+        [FromBody] VerifyMfaRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new VerifyMfaTotpCommand(request.MfaDeviceId, request.Code), cancellationToken);
+
+        return Ok(ApiResponse<MfaRecoveryCodesResponse>.Ok(result, "MFA enabled. Store these recovery codes safely — shown once."));
+    }
 }
 
 /// <summary>Request body for <c>POST /api/v1/auth/login</c>.</summary>
@@ -154,3 +195,9 @@ public sealed record InitiatePasswordResetRequest(Guid UserId);
 
 /// <summary>Request body for <c>POST /api/v1/auth/password-reset/complete</c>.</summary>
 public sealed record CompletePasswordResetRequest(string Token, string NewPassword);
+
+/// <summary>Request body for <c>POST /api/v1/auth/mfa/totp/enroll</c> (label optional).</summary>
+public sealed record EnrollMfaRequest(string? Label);
+
+/// <summary>Request body for <c>POST /api/v1/auth/mfa/totp/verify</c>.</summary>
+public sealed record VerifyMfaRequest(Guid MfaDeviceId, string Code);
