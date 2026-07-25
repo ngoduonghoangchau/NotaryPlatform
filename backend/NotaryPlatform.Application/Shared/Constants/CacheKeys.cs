@@ -47,4 +47,7 @@ public static class CacheKeys
 
     /// <summary>Failed MFA-verification counter + lockout window for UC-AUTH-06 (per user).</summary>
     public static string MfaVerifyAttempts(Guid userId) => $"Auth:MfaVerifyAttempts:{userId}";
+
+    /// <summary>A pending MFA login challenge (UC-AUTH-07), keyed by the SHA-256 hash of the raw token.</summary>
+    public static string MfaChallenge(string tokenHash) => $"Auth:MfaChallenge:{tokenHash}";
 }

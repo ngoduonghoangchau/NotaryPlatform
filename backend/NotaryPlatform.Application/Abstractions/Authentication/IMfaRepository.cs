@@ -34,7 +34,34 @@ public interface IMfaRepository
     /// <c>recovery_code</c> device row's <c>metadata</c>, revoking any prior active set (D-3).
     /// </summary>
     Task AddRecoveryCodesAsync(Guid userId, Guid tenantId, IReadOnlyList<string> hashedCodes, CancellationToken cancellationToken = default);
+
+    // ── UC-AUTH-07 · MFA verification at login ───────────────────────────────
+
+    /// <summary>
+    /// True when the user has MFA enabled — a <b>verified, non-revoked TOTP</b> device exists. Drives the
+    /// login discriminator: an MFA-enabled user is challenged instead of receiving tokens directly.
+    /// </summary>
+    Task<bool> HasActiveMfaAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Loads the caller's active (verified, non-revoked, primary-first) TOTP device — its id + encrypted
+    /// secret reference — to validate a code at challenge time, or null if none.
+    /// </summary>
+    Task<TotpChallengeRecord?> FindActiveTotpAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Consumes a recovery code: if the user's active <c>recovery_code</c> set holds an <b>unused</b> entry
+    /// whose stored hash equals <paramref name="codeHash"/>, stamps its <c>usedAt</c> (single-use) and
+    /// returns true; otherwise returns false. Tracked write — committed by <c>TransactionBehavior</c>.
+    /// </summary>
+    Task<bool> TryConsumeRecoveryCodeAsync(Guid userId, Guid tenantId, string codeHash, DateTime whenUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>Stamps a device's <c>last_used_at</c> (audit) after a successful challenge. Tracked write.</summary>
+    Task StampDeviceUsedAsync(Guid mfaDeviceId, DateTime whenUtc, CancellationToken cancellationToken = default);
 }
+
+/// <summary>Snapshot of a verified TOTP device needed to validate a login challenge code.</summary>
+public sealed record TotpChallengeRecord(Guid MfaDeviceId, string? SecretReference);
 
 /// <summary>Values required to persist a new pending TOTP enrollment (the vault reference, never the raw secret).</summary>
 public sealed record MfaTotpEnrollment(

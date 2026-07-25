@@ -47,6 +47,9 @@ public static class AppDefaults
 
         /// <summary>How long the MFA-verify lockout lasts (auto-lifts via the cache TTL).</summary>
         public static readonly TimeSpan MfaVerifyLockoutDuration = TimeSpan.FromMinutes(15);
+
+        /// <summary>How long an MFA login challenge (UC-AUTH-07) is valid — short, single-use.</summary>
+        public static readonly TimeSpan MfaChallengeTtl = TimeSpan.FromMinutes(5);
     }
 
     public static class Files
