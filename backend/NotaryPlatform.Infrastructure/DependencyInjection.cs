@@ -223,6 +223,10 @@ public static class DependencyInjection
         // ── MFA verification at login (UC-AUTH-07) ────────────────────────
         // IMfaChallengeStore — Scoped: Redis-backed, short-lived, single-use login MFA challenge (D-1).
         services.AddScoped<IMfaChallengeStore, RedisMfaChallengeStore>();
+
+        // ── Trusted devices (UC-AUTH-08) ──────────────────────────────────
+        // ITrustedDeviceRepository — Scoped: wraps the scoped DbContext (security.trusted_devices).
+        services.AddScoped<ITrustedDeviceRepository, TrustedDeviceRepository>();
     }
 
     // ── File Storage ──────────────────────────────────────────────────────────────

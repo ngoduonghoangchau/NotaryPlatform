@@ -22,6 +22,7 @@ public sealed class VerifyLoginMfaCommandHandlerTests
     private readonly IMfaSecretVault _vault = Substitute.For<IMfaSecretVault>();
     private readonly ITotpService _totp = Substitute.For<ITotpService>();
     private readonly IRecoveryCodeService _recovery = Substitute.For<IRecoveryCodeService>();
+    private readonly ITrustedDeviceRepository _trustedDevices = Substitute.For<ITrustedDeviceRepository>();
     private readonly IAuthSessionIssuer _sessionIssuer = Substitute.For<IAuthSessionIssuer>();
     private readonly IDateTime _clock = Substitute.For<IDateTime>();
 
@@ -60,7 +61,7 @@ public sealed class VerifyLoginMfaCommandHandlerTests
     }
 
     private VerifyLoginMfaCommandHandler CreateHandler() =>
-        new(_challengeStore, _lockout, _auth, _mfa, _vault, _totp, _recovery, _sessionIssuer, _clock);
+        new(_challengeStore, _lockout, _auth, _mfa, _vault, _totp, _recovery, _trustedDevices, _sessionIssuer, _clock);
 
     private static VerifyLoginMfaCommand Command(string code = TotpCode) => new(MfaToken, code);
 
@@ -185,5 +186,68 @@ public sealed class VerifyLoginMfaCommandHandlerTests
         var act = async () => await CreateHandler().Handle(Command(), CancellationToken.None);
 
         await act.Should().ThrowAsync<UnauthorizedException>();
+    }
+
+    // ── UC-AUTH-08 · trust-this-device opt-in ─────────────────────────────────
+
+    private const string ValidFingerprint = "FP-VALID-1234567890";
+
+    [Fact] // TC-FUNC-01 — trustDevice=true registers the device after a proven MFA
+    public async Task Trust_opt_in_registers_the_device_on_success()
+    {
+        var command = new VerifyLoginMfaCommand(MfaToken, TotpCode, ValidFingerprint, TrustDevice: true, DeviceName: "My Laptop");
+
+        var result = await CreateHandler().Handle(command, CancellationToken.None);
+
+        result.Status.Should().Be(LoginResponse.StatusAuthenticated);
+        await _trustedDevices.Received(1).TrustDeviceAsync(
+            Arg.Is<TrustedDeviceRegistration>(r => r.UserId == UserId && r.TenantId == TenantId && r.Fingerprint == ValidFingerprint),
+            Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // TC-FUNC-02 — trustDevice=false does not register
+    public async Task No_trust_opt_in_does_not_register()
+    {
+        await CreateHandler().Handle(Command(), CancellationToken.None);   // TrustDevice defaults false
+
+        await _trustedDevices.DidNotReceive().TrustDeviceAsync(Arg.Any<TrustedDeviceRegistration>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // TC-NEG-05 / O-5 — a fingerprint owned by another user ⇒ 409, challenge NOT consumed, no session
+    public async Task Trust_conflict_throws_409_and_preserves_the_challenge()
+    {
+        _trustedDevices.TrustDeviceAsync(Arg.Any<TrustedDeviceRegistration>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(TrustDeviceOutcome.ConflictDifferentUser);
+
+        var command = new VerifyLoginMfaCommand(MfaToken, TotpCode, ValidFingerprint, TrustDevice: true);
+        var act = async () => await CreateHandler().Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ConflictException>();
+        await _challengeStore.DidNotReceive().InvalidateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sessionIssuer.DidNotReceive().IssueAsync(Arg.Any<SessionSubject>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // TC-MFA-01 — a wrong code never trusts the device (registration only after a proven MFA)
+    public async Task Wrong_code_with_trust_opt_in_does_not_register()
+    {
+        _totp.ValidateCode(RawSecret, "000000").Returns(false);
+
+        var command = new VerifyLoginMfaCommand(MfaToken, "000000", ValidFingerprint, TrustDevice: true);
+        var act = async () => await CreateHandler().Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ValidationException>();
+        await _trustedDevices.DidNotReceive().TrustDeviceAsync(Arg.Any<TrustedDeviceRegistration>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // TC-MFA-02 — a recovery-code login can also trust the device
+    public async Task Recovery_code_login_can_trust_the_device()
+    {
+        var command = new VerifyLoginMfaCommand(MfaToken, RecoveryCode, ValidFingerprint, TrustDevice: true);
+
+        var result = await CreateHandler().Handle(command, CancellationToken.None);
+
+        result.Status.Should().Be(LoginResponse.StatusAuthenticated);
+        await _trustedDevices.Received(1).TrustDeviceAsync(
+            Arg.Is<TrustedDeviceRegistration>(r => r.Fingerprint == ValidFingerprint), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
     }
 }

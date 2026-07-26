@@ -9,9 +9,11 @@ using NotaryPlatform.Application.Features.Core.Commands.InitiatePasswordReset;
 using NotaryPlatform.Application.Features.Core.Commands.Login;
 using NotaryPlatform.Application.Features.Core.Commands.Logout;
 using NotaryPlatform.Application.Features.Core.Commands.RefreshToken;
+using NotaryPlatform.Application.Features.Core.Commands.RemoveTrustedDevice;
 using NotaryPlatform.Application.Features.Core.Commands.VerifyLoginMfa;
 using NotaryPlatform.Application.Features.Core.Commands.VerifyMfaTotp;
 using NotaryPlatform.Application.Features.Core.DTOs;
+using NotaryPlatform.Application.Features.Core.Queries.GetTrustedDevices;
 using NotaryPlatform.Application.Shared.Models.Responses;
 
 namespace NotaryPlatform.API.Controllers.v1;
@@ -45,7 +47,7 @@ public sealed class AuthController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(
-            new LoginCommand(request.TenantCode, request.Email, request.Password, request.DeviceName),
+            new LoginCommand(request.TenantCode, request.Email, request.Password, request.DeviceName, request.Fingerprint),
             cancellationToken);
 
         var message = result.Status == LoginResponse.StatusMfaRequired
@@ -70,7 +72,16 @@ public sealed class AuthController : ControllerBase
         [FromBody] VerifyLoginMfaRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await _sender.Send(new VerifyLoginMfaCommand(request.MfaToken, request.Code), cancellationToken);
+        var result = await _sender.Send(
+            new VerifyLoginMfaCommand(
+                request.MfaToken,
+                request.Code,
+                request.Fingerprint,
+                request.TrustDevice,
+                request.DeviceName,
+                request.Platform,
+                request.Browser),
+            cancellationToken);
 
         return Ok(ApiResponse<LoginResponse>.Ok(result, "Login successful."));
     }
@@ -203,10 +214,54 @@ public sealed class AuthController : ControllerBase
 
         return Ok(ApiResponse<MfaRecoveryCodesResponse>.Ok(result, "MFA enabled. Store these recovery codes safely — shown once."));
     }
+
+    /// <summary>
+    /// UC-AUTH-08 — list the signed-in user's own trusted devices (the ones that can bypass the MFA
+    /// challenge, BR-AUTH-08). Requires a valid access token; only the caller's own devices are returned.
+    /// </summary>
+    [HttpGet("trusted-devices")]
+    [ProducesResponseType(typeof(ApiResponse<IReadOnlyList<TrustedDeviceResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetTrustedDevices(CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetTrustedDevicesQuery(), cancellationToken);
+
+        return Ok(ApiResponse<IReadOnlyList<TrustedDeviceResponse>>.Ok(result, "Trusted devices retrieved."));
+    }
+
+    /// <summary>
+    /// UC-AUTH-08 — remove (soft-revoke) one of the signed-in user's own trusted devices, so it can no
+    /// longer bypass MFA. Requires a valid access token. Returns 404 when the device is not the caller's
+    /// (ownership guard / anti-enumeration).
+    /// </summary>
+    [HttpDelete("trusted-devices/{id:guid}")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveTrustedDevice(
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken)
+    {
+        await _sender.Send(new RemoveTrustedDeviceCommand(id), cancellationToken);
+
+        return Ok(ApiResponse.Ok("Trusted device removed."));
+    }
 }
 
-/// <summary>Request body for <c>POST /api/v1/auth/login</c>.</summary>
-public sealed record LoginRequest(string TenantCode, string Email, string Password, string? DeviceName);
+/// <summary>
+/// Request body for <c>POST /api/v1/auth/login</c>. The trusted-device fields are optional (UC-AUTH-08):
+/// <c>Fingerprint</c> drives the MFA bypass (BR-AUTH-08); <c>Platform</c>/<c>Browser</c> are accepted for
+/// client symmetry with the verify request but are persisted only when a device is trusted (at
+/// <c>login/mfa</c>). Older clients that omit all three are unaffected (additive change).
+/// </summary>
+public sealed record LoginRequest(
+    string TenantCode,
+    string Email,
+    string Password,
+    string? DeviceName,
+    string? Fingerprint = null,
+    string? Platform = null,
+    string? Browser = null);
 
 /// <summary>Request body for <c>POST /api/v1/auth/refresh</c>.</summary>
 public sealed record RefreshRequest(string RefreshToken);
@@ -229,5 +284,17 @@ public sealed record EnrollMfaRequest(string? Label);
 /// <summary>Request body for <c>POST /api/v1/auth/mfa/totp/verify</c>.</summary>
 public sealed record VerifyMfaRequest(Guid MfaDeviceId, string Code);
 
-/// <summary>Request body for <c>POST /api/v1/auth/login/mfa</c> (UC-AUTH-07).</summary>
-public sealed record VerifyLoginMfaRequest(string MfaToken, string Code);
+/// <summary>
+/// Request body for <c>POST /api/v1/auth/login/mfa</c> (UC-AUTH-07 + UC-AUTH-08). The trusted-device fields
+/// are optional: set <c>TrustDevice = true</c> with a valid <c>Fingerprint</c> to register the current
+/// device as trusted after this MFA verification, so later logins skip the challenge (BR-AUTH-08).
+/// <c>DeviceName</c>/<c>Platform</c>/<c>Browser</c> are stored as device hints.
+/// </summary>
+public sealed record VerifyLoginMfaRequest(
+    string MfaToken,
+    string Code,
+    string? Fingerprint = null,
+    bool TrustDevice = false,
+    string? DeviceName = null,
+    string? Platform = null,
+    string? Browser = null);

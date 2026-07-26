@@ -50,6 +50,18 @@ public static class AppDefaults
 
         /// <summary>How long an MFA login challenge (UC-AUTH-07) is valid — short, single-use.</summary>
         public static readonly TimeSpan MfaChallengeTtl = TimeSpan.FromMinutes(5);
+
+        /// <summary>
+        /// Maximum trusted-device MFA-bypass window (UC-AUTH-08, BR-AUTH-08). A trusted device skips the MFA
+        /// challenge only while <c>trusted_at + TrustedDevicePeriod &gt; now</c>; after that, MFA is required again.
+        /// </summary>
+        public static readonly TimeSpan TrustedDevicePeriod = TimeSpan.FromDays(30);
+
+        /// <summary>
+        /// Allowed device-fingerprint format (UC-AUTH-08, S-1) — a high-entropy client identifier, 8–200 chars
+        /// from an unambiguous charset. Single-sourced here so every validator uses the same rule.
+        /// </summary>
+        public const string DeviceFingerprintPattern = "^[A-Za-z0-9._:-]{8,200}$";
     }
 
     public static class Files

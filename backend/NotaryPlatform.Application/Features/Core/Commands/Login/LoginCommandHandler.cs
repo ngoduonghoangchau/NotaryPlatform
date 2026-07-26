@@ -29,6 +29,7 @@ internal sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginR
     private readonly IPasswordHasher _passwordHasher;
     private readonly IMfaRepository _mfa;
     private readonly IMfaChallengeStore _challengeStore;
+    private readonly ITrustedDeviceRepository _trustedDevices;
     private readonly IAuthSessionIssuer _sessionIssuer;
     private readonly IDateTime _clock;
 
@@ -38,6 +39,7 @@ internal sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginR
         IPasswordHasher passwordHasher,
         IMfaRepository mfa,
         IMfaChallengeStore challengeStore,
+        ITrustedDeviceRepository trustedDevices,
         IAuthSessionIssuer sessionIssuer,
         IDateTime clock)
     {
@@ -46,6 +48,7 @@ internal sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginR
         _passwordHasher = passwordHasher;
         _mfa = mfa;
         _challengeStore = challengeStore;
+        _trustedDevices = trustedDevices;
         _sessionIssuer = sessionIssuer;
         _clock = clock;
     }
@@ -91,9 +94,32 @@ internal sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginR
 
         await _lockout.ResetAsync(tenantId, email, cancellationToken);
 
-        // 6. MFA challenge (UC-AUTH-07): a user with an active MFA device must prove a second factor —
+        var hasMfa = await _mfa.HasActiveMfaAsync(user.UserId, tenantId, cancellationToken);
+        var nowUtc = _clock.UtcNow.UtcDateTime;
+
+        // 7.0 Trusted-device MFA bypass (UC-AUTH-08 / BR-AUTH-08). Only meaningful for an MFA user (a
+        //     non-MFA user issues tokens anyway). A trusted, unexpired device for this (user, fingerprint)
+        //     skips the challenge — EXCEPT for privileged roles, which never bypass MFA (decision O-6).
+        //     The privileged-role check runs only for an already-trusted device (keeps the common path cheap).
+        if (hasMfa
+            && !string.IsNullOrWhiteSpace(request.Fingerprint)
+            && await _trustedDevices.IsDeviceTrustedAsync(user.UserId, tenantId, request.Fingerprint, nowUtc, cancellationToken)
+            && !await _auth.HoldsPrivilegedRoleAsync(user.UserId, tenantId, cancellationToken))
+        {
+            // Best-effort audit stamp — does NOT extend the BR-AUTH-08 window.
+            await _trustedDevices.StampSeenAsync(user.UserId, tenantId, request.Fingerprint, nowUtc, cancellationToken);
+
+            var bypassSession = await _sessionIssuer.IssueAsync(
+                new SessionSubject(user.UserId, tenantId, user.BranchId, user.Email, user.DisplayName),
+                request.DeviceName,
+                cancellationToken);
+
+            return LoginResponse.Authenticated(bypassSession);
+        }
+
+        // 7. MFA challenge (UC-AUTH-07): a user with an active MFA device must prove a second factor —
         //    issue a short-lived challenge and return NO tokens. Nothing is persisted to Postgres here.
-        if (await _mfa.HasActiveMfaAsync(user.UserId, tenantId, cancellationToken))
+        if (hasMfa)
         {
             var challenge = await _challengeStore.IssueAsync(
                 new MfaChallengeContext(user.UserId, tenantId, request.DeviceName), cancellationToken);
@@ -102,11 +128,11 @@ internal sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginR
                 new MfaChallengeInfo(challenge.MfaToken, MfaMethods, challenge.ExpiresAt));
         }
 
-        // 7. BR-AUTH-05 gate (UC-AUTH-06): a privileged user with no device must enrol before signing in.
+        // 8. BR-AUTH-05 gate (UC-AUTH-06): a privileged user with no device must enrol before signing in.
         if (await _auth.RequiresMfaSetupAsync(user.UserId, tenantId, cancellationToken))
             throw new ForbiddenException("Multi-factor authentication must be set up before you can sign in.");
 
-        // 8. No MFA ⇒ issue the session directly (unchanged UC-AUTH-01 behaviour).
+        // 9. No MFA ⇒ issue the session directly (unchanged UC-AUTH-01 behaviour).
         var session = await _sessionIssuer.IssueAsync(
             new SessionSubject(user.UserId, tenantId, user.BranchId, user.Email, user.DisplayName),
             request.DeviceName,

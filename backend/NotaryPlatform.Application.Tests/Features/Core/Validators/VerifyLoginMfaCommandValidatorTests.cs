@@ -39,4 +39,42 @@ public sealed class VerifyLoginMfaCommandValidatorTests
 
         result.IsValid.Should().BeTrue();
     }
+
+    // ── UC-AUTH-08 · conditional fingerprint rule (O-3 / S-1) ─────────────────
+
+    [Fact] // TrustDevice=true requires a fingerprint
+    public void Trust_device_without_a_fingerprint_is_invalid()
+    {
+        var result = _validator.Validate(new VerifyLoginMfaCommand("MFA-TOKEN", "123456", Fingerprint: null, TrustDevice: true));
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == nameof(VerifyLoginMfaCommand.Fingerprint));
+    }
+
+    [Theory] // TrustDevice=true requires a WELL-FORMED fingerprint (S-1 high-entropy format)
+    [InlineData("ab")]              // too short (< 8)
+    [InlineData("bad fingerprint")] // space not allowed
+    public void Trust_device_with_a_malformed_fingerprint_is_invalid(string fingerprint)
+    {
+        var result = _validator.Validate(new VerifyLoginMfaCommand("MFA-TOKEN", "123456", fingerprint, TrustDevice: true));
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == nameof(VerifyLoginMfaCommand.Fingerprint));
+    }
+
+    [Fact] // TrustDevice=true + valid fingerprint ⇒ valid
+    public void Trust_device_with_a_valid_fingerprint_is_valid()
+    {
+        var result = _validator.Validate(new VerifyLoginMfaCommand("MFA-TOKEN", "123456", "FP-VALID-1234567890", TrustDevice: true));
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact] // O-3 — when NOT trusting, a missing/odd fingerprint is ignored (does not fail a normal MFA login)
+    public void Fingerprint_is_ignored_when_not_trusting()
+    {
+        var result = _validator.Validate(new VerifyLoginMfaCommand("MFA-TOKEN", "123456", Fingerprint: "!!", TrustDevice: false));
+
+        result.IsValid.Should().BeTrue();
+    }
 }
