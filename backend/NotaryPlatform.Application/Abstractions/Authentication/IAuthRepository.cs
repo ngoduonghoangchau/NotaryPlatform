@@ -34,6 +34,13 @@ public interface IAuthRepository
     Task<bool> RequiresMfaSetupAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns true when the user holds a privileged role (COMPANY_ADMIN / COMPLIANCE_OFC). Used by
+    /// UC-AUTH-08 to <b>deny the trusted-device MFA bypass</b> for privileged roles (decision O-6). The
+    /// privileged role-code set is an Infrastructure concern, so the decision lives there.
+    /// </summary>
+    Task<bool> HoldsPrivilegedRoleAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// BR-AUTH-07: revokes any non-revoked refresh token for the same (user, device) before a new one
     /// is issued. No-op when <paramref name="deviceName"/> is null/blank (no device identity to key on).
     /// </summary>

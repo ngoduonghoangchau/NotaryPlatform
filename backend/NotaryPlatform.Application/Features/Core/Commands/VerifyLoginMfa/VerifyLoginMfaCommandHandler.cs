@@ -32,6 +32,7 @@ internal sealed class VerifyLoginMfaCommandHandler : IRequestHandler<VerifyLogin
     private readonly IMfaSecretVault _vault;
     private readonly ITotpService _totp;
     private readonly IRecoveryCodeService _recovery;
+    private readonly ITrustedDeviceRepository _trustedDevices;
     private readonly IAuthSessionIssuer _sessionIssuer;
     private readonly IDateTime _clock;
 
@@ -43,6 +44,7 @@ internal sealed class VerifyLoginMfaCommandHandler : IRequestHandler<VerifyLogin
         IMfaSecretVault vault,
         ITotpService totp,
         IRecoveryCodeService recovery,
+        ITrustedDeviceRepository trustedDevices,
         IAuthSessionIssuer sessionIssuer,
         IDateTime clock)
     {
@@ -53,6 +55,7 @@ internal sealed class VerifyLoginMfaCommandHandler : IRequestHandler<VerifyLogin
         _vault = vault;
         _totp = totp;
         _recovery = recovery;
+        _trustedDevices = trustedDevices;
         _sessionIssuer = sessionIssuer;
         _clock = clock;
     }
@@ -84,12 +87,29 @@ internal sealed class VerifyLoginMfaCommandHandler : IRequestHandler<VerifyLogin
             throw new ValidationException(CodeField, CodeInvalidMessage, ErrorCodes.MfaCodeInvalid);   // 400, challenge NOT consumed
         }
 
-        // 5. Success — clear the counter and burn the challenge (single-use).
+        // 5. (UC-AUTH-08) The user opted to trust this device — register/renew it now that MFA is PROVEN.
+        //    A fingerprint already owned by a different user in the tenant is rejected (O-5 → 409). This runs
+        //    BEFORE the challenge is consumed, so on conflict the user can retry the login without trusting.
+        //    The validator guarantees a well-formed fingerprint whenever TrustDevice is true.
+        if (request.TrustDevice && !string.IsNullOrWhiteSpace(request.Fingerprint))
+        {
+            var outcome = await _trustedDevices.TrustDeviceAsync(
+                new TrustedDeviceRegistration(
+                    user.TenantId, user.UserId, request.Fingerprint,
+                    request.DeviceName, request.Platform, request.Browser, Ip: null),
+                _clock.UtcNow.UtcDateTime,
+                cancellationToken);
+
+            if (outcome == TrustDeviceOutcome.ConflictDifferentUser)
+                throw new ConflictException("This device is already registered to another user.");   // 409 (O-5)
+        }
+
+        // 6. Success — clear the counter and burn the challenge (single-use).
         await _lockout.ResetAsync(challenge.UserId, cancellationToken);
         await _challengeStore.InvalidateAsync(request.MfaToken, cancellationToken);
 
-        // 6. Issue the session — identical to a normal login. Recovery-code consumption (step 4) and the
-        //    refresh-token write commit atomically in TransactionBehavior's transaction.
+        // 7. Issue the session — identical to a normal login. Recovery-code consumption (step 4), the trusted
+        //    device (step 5), and the refresh-token write commit atomically in TransactionBehavior's transaction.
         var session = await _sessionIssuer.IssueAsync(
             new SessionSubject(user.UserId, user.TenantId, user.BranchId, user.Email, user.DisplayName),
             challenge.DeviceName,

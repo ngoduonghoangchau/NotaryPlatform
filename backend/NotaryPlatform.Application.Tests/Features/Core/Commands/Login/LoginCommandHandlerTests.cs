@@ -23,6 +23,7 @@ public sealed class LoginCommandHandlerTests
     private readonly IPasswordHasher _passwordHasher = Substitute.For<IPasswordHasher>();
     private readonly IMfaRepository _mfa = Substitute.For<IMfaRepository>();
     private readonly IMfaChallengeStore _challengeStore = Substitute.For<IMfaChallengeStore>();
+    private readonly ITrustedDeviceRepository _trustedDevices = Substitute.For<ITrustedDeviceRepository>();
     private readonly IAuthSessionIssuer _sessionIssuer = Substitute.For<IAuthSessionIssuer>();
     private readonly IDateTime _clock = Substitute.For<IDateTime>();
 
@@ -42,7 +43,7 @@ public sealed class LoginCommandHandlerTests
     public LoginCommandHandlerTests() => _clock.UtcNow.Returns(Now);
 
     private LoginCommandHandler CreateHandler() =>
-        new(_auth, _lockout, _passwordHasher, _mfa, _challengeStore, _sessionIssuer, _clock);
+        new(_auth, _lockout, _passwordHasher, _mfa, _challengeStore, _trustedDevices, _sessionIssuer, _clock);
 
     private static LoginCommand Command(string? device = "web") =>
         new(TenantCode, Email, Password, device);
@@ -184,5 +185,92 @@ public sealed class LoginCommandHandlerTests
         var act = async () => await CreateHandler().Handle(Command(), CancellationToken.None);
 
         await act.Should().ThrowAsync<UnauthorizedException>();
+    }
+
+    // ── UC-AUTH-08 · trusted-device MFA bypass ────────────────────────────────
+
+    private const string Fingerprint = "FP-TRUSTED-DEVICE-1234567890";
+
+    private static LoginCommand FingerprintCommand(string fingerprint = Fingerprint) =>
+        new(TenantCode, Email, Password, "web", fingerprint);
+
+    [Fact] // TC-FUNC-03 / TC-BR-01 — a trusted, unexpired device bypasses the MFA challenge
+    public async Task Trusted_device_bypasses_the_challenge_and_issues_a_session()
+    {
+        ArrangeHappyPath();
+        _mfa.HasActiveMfaAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(true);
+        _trustedDevices.IsDeviceTrustedAsync(UserId, TenantId, Fingerprint, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        _auth.HoldsPrivilegedRoleAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await CreateHandler().Handle(FingerprintCommand(), CancellationToken.None);
+
+        result.Status.Should().Be(LoginResponse.StatusAuthenticated);
+        result.Session.Should().Be(Session);
+        await _trustedDevices.Received(1).StampSeenAsync(UserId, TenantId, Fingerprint, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        await _challengeStore.DidNotReceive().IssueAsync(Arg.Any<MfaChallengeContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // O-6 / TC-BR-05 — a privileged role never bypasses MFA, even from a trusted device
+    public async Task Privileged_role_with_a_trusted_device_still_gets_a_challenge()
+    {
+        ArrangeHappyPath();
+        _mfa.HasActiveMfaAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(true);
+        _trustedDevices.IsDeviceTrustedAsync(UserId, TenantId, Fingerprint, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        _auth.HoldsPrivilegedRoleAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(true);
+
+        var result = await CreateHandler().Handle(FingerprintCommand(), CancellationToken.None);
+
+        result.Status.Should().Be(LoginResponse.StatusMfaRequired);
+        await _trustedDevices.DidNotReceive().StampSeenAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        await _sessionIssuer.DidNotReceive().IssueAsync(Arg.Any<SessionSubject>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // TC-FUNC-04 / TC-EDGE-02 — an untrusted fingerprint does not bypass
+    public async Task Untrusted_fingerprint_gets_a_challenge()
+    {
+        ArrangeHappyPath();
+        _mfa.HasActiveMfaAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(true);
+        _trustedDevices.IsDeviceTrustedAsync(UserId, TenantId, Fingerprint, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await CreateHandler().Handle(FingerprintCommand(), CancellationToken.None);
+
+        result.Status.Should().Be(LoginResponse.StatusMfaRequired);
+        await _sessionIssuer.DidNotReceive().IssueAsync(Arg.Any<SessionSubject>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // TC-EDGE-01 — an MFA user with NO fingerprint is challenged; the trusted-device lookup is skipped
+    public async Task No_fingerprint_does_not_query_trusted_devices()
+    {
+        ArrangeHappyPath();
+        _mfa.HasActiveMfaAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(true);
+
+        var result = await CreateHandler().Handle(Command(), CancellationToken.None);   // no fingerprint
+
+        result.Status.Should().Be(LoginResponse.StatusMfaRequired);
+        await _trustedDevices.DidNotReceive().IsDeviceTrustedAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // TC-NEG-01 / TC-SEC-01 — a wrong password fails before the trusted-device bypass is considered
+    public async Task Wrong_password_never_checks_the_trusted_device()
+    {
+        ArrangeHappyPath();
+        _mfa.HasActiveMfaAsync(UserId, TenantId, Arg.Any<CancellationToken>()).Returns(true);
+        _passwordHasher.Verify(Password, PasswordHash).Returns(false);
+
+        var act = async () => await CreateHandler().Handle(FingerprintCommand(), CancellationToken.None);
+
+        await act.Should().ThrowAsync<UnauthorizedException>();
+        await _trustedDevices.DidNotReceive().IsDeviceTrustedAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // TC-FUNC-08 — a non-MFA user is unaffected by a fingerprint (bypass requires MFA)
+    public async Task Non_mfa_user_ignores_the_fingerprint()
+    {
+        ArrangeHappyPath();   // HasActiveMfaAsync = false
+
+        var result = await CreateHandler().Handle(FingerprintCommand(), CancellationToken.None);
+
+        result.Status.Should().Be(LoginResponse.StatusAuthenticated);
+        await _trustedDevices.DidNotReceive().IsDeviceTrustedAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
     }
 }

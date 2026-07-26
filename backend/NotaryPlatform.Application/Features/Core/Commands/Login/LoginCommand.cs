@@ -12,9 +12,12 @@ namespace NotaryPlatform.Application.Features.Core.Commands.Login;
 ///
 /// <paramref name="TenantCode"/> disambiguates the per-tenant-unique login email (Decision D1).
 /// <paramref name="DeviceName"/> is optional; when present it drives one-token-per-device (BR-AUTH-07).
+/// <paramref name="Fingerprint"/> is optional (UC-AUTH-08); when it matches a trusted, unexpired device the
+/// MFA challenge is bypassed (BR-AUTH-08). A missing/unknown/malformed fingerprint simply means no bypass.
 /// </summary>
 public sealed record LoginCommand(
     string TenantCode,
     string Email,
     string Password,
-    string? DeviceName) : ICommand<LoginResponse>;
+    string? DeviceName,
+    string? Fingerprint = null) : ICommand<LoginResponse>;
