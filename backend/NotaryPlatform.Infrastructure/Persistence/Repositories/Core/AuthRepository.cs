@@ -60,22 +60,7 @@ public sealed class AuthRepository : IAuthRepository
 
     public async Task<bool> RequiresMfaSetupAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
     {
-        // BR-AUTH-05 privileged roles: TenantAdmin (COMPANY_ADMIN) and ComplianceOfficer (COMPLIANCE_OFC).
-        string[] privilegedRoleCodes =
-        [
-            RolePermissionMap.RoleCodes.TenantAdmin,
-            RolePermissionMap.RoleCodes.ComplianceOfficer,
-        ];
-
-        var holdsPrivilegedRole = await _context.UserRoles.AnyAsync(ur =>
-            ur.UserId == userId
-            && ur.Role.TenantId == tenantId
-            && ur.Role.IsActive
-            && ur.Role.DeletedAt == null
-            && privilegedRoleCodes.Contains(ur.Role.RoleCode),
-            cancellationToken);
-
-        if (!holdsPrivilegedRole)
+        if (!await HoldsPrivilegedRoleAsync(userId, tenantId, cancellationToken))
             return false;
 
         var hasActiveMfaDevice = await _context.MfaDevices.AnyAsync(m =>
@@ -86,6 +71,24 @@ public sealed class AuthRepository : IAuthRepository
             cancellationToken);
 
         return !hasActiveMfaDevice;
+    }
+
+    public Task<bool> HoldsPrivilegedRoleAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        // BR-AUTH-05 privileged roles: TenantAdmin (COMPANY_ADMIN) and ComplianceOfficer (COMPLIANCE_OFC).
+        string[] privilegedRoleCodes =
+        [
+            RolePermissionMap.RoleCodes.TenantAdmin,
+            RolePermissionMap.RoleCodes.ComplianceOfficer,
+        ];
+
+        return _context.UserRoles.AnyAsync(ur =>
+            ur.UserId == userId
+            && ur.Role.TenantId == tenantId
+            && ur.Role.IsActive
+            && ur.Role.DeletedAt == null
+            && privilegedRoleCodes.Contains(ur.Role.RoleCode),
+            cancellationToken);
     }
 
     public async Task RevokeActiveRefreshTokensForDeviceAsync(Guid userId, string? deviceName, CancellationToken cancellationToken = default)
